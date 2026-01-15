@@ -1,0 +1,2 @@
+# Optional: security for storage/logs
+# Jika mod_rewrite aktif, Anda bisa menambah aturan untuk blok akses direct ke file tertentu.
