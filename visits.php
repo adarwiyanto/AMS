@@ -10,8 +10,27 @@ $settings = get_settings();
 csrf_validate();
 
 $patientId = (int)($_GET['patient_id'] ?? 0);
-$new = isset($_GET['new']) ? 1 : 0;
 $action = $_POST['action'] ?? '';
+
+// ===== Rekap filter (dipakai saat patient_id kosong / sidebar) =====
+$range = $_GET['range'] ?? 'today';
+$start = $_GET['start'] ?? '';
+$end   = $_GET['end'] ?? '';
+
+function visit_range_dates(string $range, string $start, string $end): array {
+  $today = date('Y-m-d');
+  if ($range === 'today') return [$today, $today];
+  if ($range === 'yesterday') {
+    $y = date('Y-m-d', strtotime('-1 day'));
+    return [$y, $y];
+  }
+  if ($range === 'last7') {
+    $s = date('Y-m-d', strtotime('-6 day'));
+    return [$s, $today];
+  }
+  if ($range === 'custom' && $start && $end) return [$start, $end];
+  return [$today, $today];
+}
 
 function next_visit_no(): string {
   $prefix = date('Ymd');
@@ -21,22 +40,40 @@ function next_visit_no(): string {
   return $prefix . str_pad((string)$n, 4, '0', STR_PAD_LEFT);
 }
 
+/**
+ * CREATE VISIT (mode per pasien)
+ * + otomatis menutup antrian NEW di visit_queue untuk tanggal hari ini
+ */
 if ($action === 'create_visit') {
   $patientId = (int)($_POST['patient_id'] ?? 0);
   $anamnesis = trim($_POST['anamnesis'] ?? '');
-  $physical = trim($_POST['physical_exam'] ?? '');
-  $usg = trim($_POST['usg_report'] ?? '');
-  $therapy = trim($_POST['therapy'] ?? 'Lanjutkan terapi dari dokter sebelumnya');
+  $physical  = trim($_POST['physical_exam'] ?? '');
+  $usg       = trim($_POST['usg_report'] ?? '');
+  $therapy   = trim($_POST['therapy'] ?? 'Lanjutkan terapi dari dokter sebelumnya');
 
   if ($patientId <= 0) {
     flash_set('err','Pilih pasien terlebih dahulu.');
     redirect('/visits.php');
   }
+
   $visitNo = next_visit_no();
   db_exec("INSERT INTO visits(patient_id, visit_no, visit_date, anamnesis, physical_exam, usg_report, therapy, doctor_id, created_at)
            VALUES(?,?,?,?,?,?,?,?,?)",
-    [$patientId, $visitNo, now_dt(), $anamnesis, $physical, $usg, $therapy, $u['id'], now_dt()]
+    [$patientId, $visitNo, now_dt(), $anamnesis, $physical, $usg, $therapy, (int)$u['id'], now_dt()]
   );
+
+  $lastVisitId = (int)db()->lastInsertId();
+
+  // Tutup antrian NEW (hari ini) kalau ada
+  $today = date('Y-m-d');
+  db_exec("UPDATE visit_queue
+           SET status='done', handled_visit_id=?, updated_at=?
+           WHERE patient_id=? AND queue_date=? AND status='new'
+           ORDER BY id DESC
+           LIMIT 1",
+    [$lastVisitId, now_dt(), $patientId, $today]
+  );
+
   flash_set('ok','Kunjungan tersimpan. No: ' . $visitNo);
   redirect('/visits.php?patient_id=' . $patientId);
 }
@@ -44,13 +81,14 @@ if ($action === 'create_visit') {
 if ($action === 'update_visit') {
   $id = (int)($_POST['id'] ?? 0);
   $anamnesis = trim($_POST['anamnesis'] ?? '');
-  $physical = trim($_POST['physical_exam'] ?? '');
-  $usg = trim($_POST['usg_report'] ?? '');
-  $therapy = trim($_POST['therapy'] ?? '');
+  $physical  = trim($_POST['physical_exam'] ?? '');
+  $usg       = trim($_POST['usg_report'] ?? '');
+  $therapy   = trim($_POST['therapy'] ?? '');
 
   db_exec("UPDATE visits SET anamnesis=?, physical_exam=?, usg_report=?, therapy=?, doctor_id=?, updated_at=? WHERE id=?",
-    [$anamnesis, $physical, $usg, $therapy, $u['id'], now_dt(), $id]
+    [$anamnesis, $physical, $usg, $therapy, (int)$u['id'], now_dt(), $id]
   );
+
   flash_set('ok','Kunjungan diperbarui.');
   $pid = (int)($_POST['patient_id'] ?? 0);
   redirect('/visits.php?patient_id=' . $pid);
@@ -58,6 +96,122 @@ if ($action === 'update_visit') {
 
 $patients = db()->query("SELECT id, mrn, full_name, dob, gender FROM patients ORDER BY created_at DESC LIMIT 300")->fetchAll();
 
+/**
+ * ===== REKAP MODE (SIDEBAR) =====
+ * Jika patient_id kosong, tampilkan antrian pendaftaran berobat (visit_queue) + status NEW/DONE
+ */
+if ($patientId <= 0) {
+  list($d1, $d2) = visit_range_dates($range, $start, $end);
+
+  $st = db()->prepare("
+    SELECT
+      q.id AS queue_id,
+      q.queue_date,
+      q.status,
+      q.patient_id,
+      q.handled_visit_id,
+      q.created_at AS queue_created_at,
+
+      p.mrn,
+      p.full_name,
+
+      v.visit_no,
+      v.visit_date,
+      u.full_name AS doctor_name
+    FROM visit_queue q
+    JOIN patients p ON p.id = q.patient_id
+    LEFT JOIN visits v ON v.id = q.handled_visit_id
+    LEFT JOIN users u ON u.id = v.doctor_id
+    WHERE q.queue_date BETWEEN ? AND ?
+    ORDER BY q.queue_date DESC, q.id DESC
+    LIMIT 200
+  ");
+  $st->execute([$d1, $d2]);
+  $rows = $st->fetchAll();
+
+  $title = "Kunjungan";
+  require __DIR__ . '/app/views/partials/header.php';
+  ?>
+  <div class="card">
+    <div class="h1">Kunjungan</div>
+    <div class="muted">Rekap pendaftaran berobat (NEW/DONE) berdasarkan rentang waktu.</div>
+  </div>
+
+  <div class="card">
+    <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+      <div style="min-width:220px">
+        <div class="label">Rentang</div>
+        <select class="input" name="range">
+          <option value="today" <?= $range==='today'?'selected':'' ?>>Hari ini</option>
+          <option value="yesterday" <?= $range==='yesterday'?'selected':'' ?>>Kemarin</option>
+          <option value="last7" <?= $range==='last7'?'selected':'' ?>>7 hari terakhir</option>
+          <option value="custom" <?= $range==='custom'?'selected':'' ?>>Custom</option>
+        </select>
+      </div>
+      <div>
+        <div class="label">Mulai</div>
+        <input class="input" type="date" name="start" value="<?= e($d1) ?>">
+      </div>
+      <div>
+        <div class="label">Sampai</div>
+        <input class="input" type="date" name="end" value="<?= e($d2) ?>">
+      </div>
+      <button class="btn secondary" type="submit">Terapkan</button>
+
+      <a class="btn" href="<?= e(url('/patients.php')) ?>">+ Pasien</a>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="h1" style="font-size:16px">Daftar Pendaftaran Berobat</div>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Tanggal</th>
+          <th>Status</th>
+          <th>Pasien</th>
+          <th>No Kunjungan</th>
+          <th>Dokter</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($rows as $r): ?>
+          <?php $stt = strtoupper((string)($r['status'] ?? '')); ?>
+          <tr>
+            <td><?= e($r['queue_date']) ?></td>
+            <td><?= e($stt) ?></td>
+            <td><?= e(($r['mrn'] ?? '').' - '.($r['full_name'] ?? '')) ?></td>
+            <td><?= e($r['visit_no'] ?? '-') ?></td>
+            <td><?= e($r['doctor_name'] ?? '-') ?></td>
+            <td style="display:flex;gap:8px;flex-wrap:wrap">
+              <a class="btn small secondary" href="<?= e(url('/visits.php?patient_id='.(int)$r['patient_id'])) ?>">Buka Pasien</a>
+
+              <?php if (!empty($r['handled_visit_id'])): ?>
+                <a class="btn small secondary" href="<?= e(url('/visit_edit.php?id='.(int)$r['handled_visit_id'])) ?>">Edit</a>
+                <a class="btn small" href="<?= e(url('/print_visit.php?id='.(int)$r['handled_visit_id'])) ?>" target="_blank">Print Hasil</a>
+                <a class="btn small secondary" href="<?= e(url('/prescriptions.php?visit_id='.(int)$r['handled_visit_id'])) ?>">Resep</a>
+                <a class="btn small secondary" href="<?= e(url('/referrals.php?visit_id='.(int)$r['handled_visit_id'])) ?>">Rujukan</a>
+              <?php else: ?>
+                <!-- belum ada visit, status biasanya NEW -->
+                <span class="muted">Belum ditangani</span>
+              <?php endif; ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        <?php if (!$rows): ?><tr><td colspan="6" class="muted">Tidak ada data.</td></tr><?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <?php require __DIR__ . '/app/views/partials/footer.php'; ?>
+  <?php exit; ?>
+<?php } // end rekap mode ?>
+
+<?php
+/**
+ * ===== MODE PER PASIEN (LAMA) =====
+ */
 $patient = null;
 if ($patientId > 0) {
   $st = db()->prepare("SELECT * FROM patients WHERE id = ?");
@@ -68,8 +222,11 @@ if ($patientId > 0) {
 $visits = [];
 if ($patientId > 0) {
   $st = db()->prepare("SELECT v.*, u.full_name AS doctor_name
-                       FROM visits v LEFT JOIN users u ON u.id=v.doctor_id
-                       WHERE v.patient_id = ? ORDER BY v.visit_date DESC LIMIT 50");
+                       FROM visits v
+                       LEFT JOIN users u ON u.id=v.doctor_id
+                       WHERE v.patient_id = ?
+                       ORDER BY v.visit_date DESC
+                       LIMIT 50");
   $st->execute([$patientId]);
   $visits = $st->fetchAll();
 }
@@ -153,6 +310,7 @@ require __DIR__ . '/app/views/partials/header.php';
               <a class="btn small secondary" href="<?= e(url('/visit_edit.php?id='.(int)$v['id'])) ?>">Edit</a>
               <a class="btn small" href="<?= e(url('/print_visit.php?id='.(int)$v['id'])) ?>" target="_blank">Print Hasil</a>
               <a class="btn small secondary" href="<?= e(url('/prescriptions.php?visit_id='.(int)$v['id'])) ?>">Resep</a>
+              <a class="btn small secondary" href="<?= e(url('/referrals.php?visit_id='.(int)$v['id'])) ?>">Rujukan</a>
             </td>
           </tr>
         <?php endforeach; ?>

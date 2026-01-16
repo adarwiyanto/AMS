@@ -6,10 +6,6 @@ $badge = $settings['brand_badge'] ?? 'Adena Medical System';
 $logo_url = $settings['logo_path'] ?? '';
 $custom_css = $settings['custom_css'] ?? '';
 $u = $u ?? null;
-
-$role = $u['role'] ?? '';
-$is_admin = ($role === 'admin');
-$is_sekretariat = ($role === 'sekretariat');
 ?>
 <!doctype html>
 <html lang="id">
@@ -36,14 +32,11 @@ $is_sekretariat = ($role === 'sekretariat');
     <nav class="side-nav">
       <a href="<?= e(url('/index.php')) ?>">Dashboard</a>
       <a href="<?= e(url('/patients.php')) ?>">Pasien</a>
-      <a href="<?= e(url('/schedule.php')) ?>">Jadwal</a>
+      <a href="<?= e(url('/visits.php')) ?>">Kunjungan</a>
+      <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
+      <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
 
-      <?php if (!$is_sekretariat): ?>
-        <a href="<?= e(url('/visits.php')) ?>">Kunjungan</a>
-        <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
-      <?php endif; ?>
-
-      <?php if ($is_admin): ?>
+      <?php if ($u && $u['role'] === 'admin'): ?>
         <div class="nav-sep">Admin</div>
         <a href="<?= e(url('/users.php')) ?>">User & Role</a>
         <a href="<?= e(url('/settings.php')) ?>">Kop Surat & Theme</a>
