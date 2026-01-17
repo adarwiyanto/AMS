@@ -38,6 +38,7 @@ if (is_post()) {
   set_setting('clinic_sip', trim($_POST['clinic_sip'] ?? ''));
 
   set_setting('custom_css', (string)($_POST['custom_css'] ?? ''));
+  set_setting('card_css', (string)($_POST['card_css'] ?? ''));
 
   $logo = save_upload('logo', 'logo', ['png','jpg','jpeg','webp']);
   if ($logo) set_setting('logo_path', $logo);
@@ -110,6 +111,12 @@ require __DIR__ . '/app/views/partials/header.php';
       <textarea class="input" name="custom_css" placeholder="Tulis CSS di sini..."><?= e($settings['custom_css'] ?? '') ?></textarea>
       <div class="muted" style="margin-top:6px">Tip: cukup override variabel :root atau class tertentu. Tidak perlu edit file di luar.</div>
     </div>
+    <div class="col-12">
+      <div class="label">Card CSS (Kartu Berobat - opsional)</div>
+      <textarea class="input" name="card_css" placeholder="CSS khusus kartu berobat..."><?= e($settings['card_css'] ?? '') ?></textarea>
+      <div class="muted" style="margin-top:6px">CSS ini hanya diterapkan pada halaman kartu berobat (KTP). Anda bisa ubah warna tema, font, dan layout tanpa edit file.</div>
+    </div>
+
 
     <div class="col-12" style="display:flex;justify-content:flex-end">
       <button class="btn" type="submit">Simpan</button>

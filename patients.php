@@ -97,11 +97,14 @@ if ($action === 'create') {
   if ($row && preg_match('/^\d{4}(\d{6})$/', $row['mrn'], $m)) $next = (int)$m[1] + 1;
   $mrn = $prefix . str_pad((string)$next, 6, '0', STR_PAD_LEFT);
 
-  db_exec("INSERT INTO patients(mrn, full_name, dob, gender, address, created_at) VALUES(?,?,?,?,?,?)",
-    [$mrn, $name, $dob, $gender, $address, now_dt()]
-  );
+  $stmt = db()->prepare("INSERT INTO patients(mrn, full_name, dob, gender, address, created_at) VALUES(?,?,?,?,?,?)");
+  $stmt->execute([$mrn, $name, $dob, $gender, $address, now_dt()]);
+  $newId = (int)db()->lastInsertId();
 
   flash_set('ok','Pasien ditambahkan. MRN: ' . $mrn);
+  if (!empty($_POST['print_card']) && $newId > 0) {
+    redirect('/patient_card_pdf.php?id=' . $newId);
+  }
   redirect('/patients.php');
 }
 
@@ -173,7 +176,8 @@ require __DIR__ . '/app/views/partials/header.php';
       <input class="input" name="address">
     </div>
 
-    <div class="col-12" style="display:flex;justify-content:flex-end">
+    <div class="col-12" style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn secondary" type="submit" name="print_card" value="1">Simpan &amp; Cetak Kartu</button>
       <button class="btn" type="submit">Simpan</button>
     </div>
   </form>
@@ -196,6 +200,8 @@ require __DIR__ . '/app/views/partials/header.php';
           <td style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
 
             <a class="btn small secondary" href="<?= e(url('/patient_edit.php?id='.(int)$r['id'])) ?>">Edit</a>
+
+            <a class="btn small secondary" href="<?= e(url('/patient_card_pdf.php?id='.(int)$r['id'])) ?>" target="_blank">Kartu (PDF)</a>
 
             <?php if ($is_sekretariat || $is_admin): ?>
               <form method="post" style="display:inline">

@@ -19,6 +19,17 @@ $st->execute([$id]);
 $v = $st->fetch();
 if (!$v) { http_response_code(404); echo "Not found"; exit; }
 
+// USG images (opsional; tabel add-on)
+$usgImages = [];
+try {
+  $st2 = db()->prepare("SELECT id, file_path, caption FROM usg_images WHERE visit_id=? ORDER BY sort_order ASC, id ASC");
+  $st2->execute([(int)$v['id']]);
+  $usgImages = $st2->fetchAll();
+} catch (Throwable $e) {
+  // jika tabel belum ada (belum migrasi), biarkan kosong agar tidak mengganggu fitur lama
+  $usgImages = [];
+}
+
 $clinicName = $settings['clinic_name'] ?? ($settings['brand_title'] ?? 'Praktek dr. Agus');
 $clinicAddr = $settings['clinic_address'] ?? '';
 $clinicSip  = $settings['clinic_sip'] ?? '';
@@ -48,6 +59,13 @@ $age = age_from_dob($v['dob']);
     .block{margin-top:10px}
     .label2{font-size:12px;color:#333;font-weight:700;margin-bottom:4px}
     pre{white-space:pre-wrap;font-family:inherit;margin:0}
+    .usggrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+    .usgimg{border:1px solid #ddd;border-radius:10px;padding:8px}
+    .usgimg img{width:100%;height:70mm;object-fit:contain;display:block}
+    .usgcap{font-size:12px;color:#333;margin-top:6px}
+    @media print{
+      .paper{max-width:unset}
+    }
     .sign{margin-top:24px;display:flex;justify-content:flex-end}
     .signbox{text-align:center}
     .signbox img{width:180px;height:auto}
@@ -84,6 +102,20 @@ $age = age_from_dob($v['dob']);
     <div class="block">
       <div class="label2">Laporan USG</div>
       <pre><?= e($v['usg_report'] ?? '') ?></pre>
+
+      <?php if (!empty($usgImages)): ?>
+        <div style="margin-top:10px" class="label2">Foto USG</div>
+        <div class="usggrid">
+          <?php foreach ($usgImages as $img): ?>
+            <div class="usgimg">
+              <img src="<?= e(url($img['file_path'])) ?>" alt="USG">
+              <?php if (!empty($img['caption'])): ?>
+                <div class="usgcap"><?= e($img['caption']) ?></div>
+              <?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     </div>
 
     <div class="block">

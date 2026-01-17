@@ -40,10 +40,65 @@ function next_visit_no(): string {
   return $prefix . str_pad((string)$n, 4, '0', STR_PAD_LEFT);
 }
 
-/**
- * CREATE VISIT (mode per pasien)
- * + otomatis menutup antrian NEW di visit_queue untuk tanggal hari ini
- */
+// ===== helper upload USG =====
+function usg_upload_dir_abs(): string {
+  $base = realpath(__DIR__ . '/storage');
+  if (!$base) return '';
+  return $base . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'usg';
+}
+function usg_upload_url_rel(): string {
+  return '/storage/uploads/usg';
+}
+
+function save_usg_images_for_visit(int $visitId, array $files, array $captions = []): void {
+  if ($visitId <= 0) return;
+  if (empty($files) || empty($files['name'])) return;
+
+  $dir = usg_upload_dir_abs();
+  if ($dir === '') throw new Exception('Folder storage tidak ditemukan.');
+  if (!is_dir($dir)) @mkdir($dir, 0775, true);
+  if (!is_dir($dir) || !is_writable($dir)) {
+    throw new Exception('Folder upload USG tidak writable: ' . $dir);
+  }
+
+  $names = (array)$files['name'];
+  $tmp   = (array)$files['tmp_name'];
+  $errs  = (array)$files['error'];
+  $sizes = (array)$files['size'];
+
+  for ($i=0; $i<count($names); $i++) {
+    if (!isset($errs[$i]) || $errs[$i] === UPLOAD_ERR_NO_FILE) continue;
+    if ($errs[$i] !== UPLOAD_ERR_OK) continue;
+
+    $orig = (string)$names[$i];
+    $ext = strtolower(pathinfo($orig, PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg','jpeg','png'], true)) continue;
+
+    if (isset($sizes[$i]) && (int)$sizes[$i] > 8 * 1024 * 1024) continue;
+
+    $safe = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', pathinfo($orig, PATHINFO_FILENAME));
+    if (!$safe) $safe = 'usg';
+
+    $fname = 'USG_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '_' . $safe . '.' . $ext;
+    $abs = $dir . DIRECTORY_SEPARATOR . $fname;
+
+    if (!move_uploaded_file($tmp[$i], $abs)) continue;
+
+    // Set permission aman untuk file upload (umumnya 0644 di hosting Linux)
+    @chmod($abs, 0644);
+
+    $rel = usg_upload_url_rel() . '/' . $fname;
+    $cap = '';
+    if (isset($captions[$i])) $cap = trim((string)$captions[$i]);
+
+    // tabel dari patch pack
+    db_exec("INSERT INTO usg_images(visit_id, file_path, caption, created_at) VALUES(?,?,?,?)",
+      [$visitId, $rel, $cap, now_dt()]
+    );
+  }
+}
+
+// ===== CREATE VISIT (mode per pasien) + tutup antrian NEW + upload usg =====
 if ($action === 'create_visit') {
   $patientId = (int)($_POST['patient_id'] ?? 0);
   $anamnesis = trim($_POST['anamnesis'] ?? '');
@@ -59,25 +114,39 @@ if ($action === 'create_visit') {
   $visitNo = next_visit_no();
   db_exec("INSERT INTO visits(patient_id, visit_no, visit_date, anamnesis, physical_exam, usg_report, therapy, doctor_id, created_at)
            VALUES(?,?,?,?,?,?,?,?,?)",
-    [$patientId, $visitNo, now_dt(), $anamnesis, $physical, $usg, $therapy, (int)$u['id'], now_dt()]
+    [$patientId, $visitNo, now_dt(), $anamnesis, $physical, $usg, $therapy, (int)($u['id'] ?? 0), now_dt()]
   );
 
-  $lastVisitId = (int)db()->lastInsertId();
+  $newVisitId = (int)db()->lastInsertId();
 
   // Tutup antrian NEW (hari ini) kalau ada
   $today = date('Y-m-d');
   db_exec("UPDATE visit_queue
-           SET status='done', handled_visit_id=?, updated_at=?
+           SET status='done', handled_visit_id=?
            WHERE patient_id=? AND queue_date=? AND status='new'
            ORDER BY id DESC
            LIMIT 1",
-    [$lastVisitId, now_dt(), $patientId, $today]
+    [$newVisitId, $patientId, $today]
   );
+
+  // upload foto USG jika ada (kunjungan tetap sukses walau upload gagal)
+  try {
+    if (!empty($_FILES['usg_images']) && is_array($_FILES['usg_images'])) {
+      $caps = $_POST['usg_caption'] ?? [];
+      if (!is_array($caps)) $caps = [];
+      save_usg_images_for_visit($newVisitId, $_FILES['usg_images'], $caps);
+    }
+  } catch (Throwable $e) {
+    log_app('error', 'USG upload failed on create_visit', ['err'=>$e->getMessage(), 'visit_id'=>$newVisitId]);
+    flash_set('err','Kunjungan tersimpan, tapi upload foto USG gagal: '.$e->getMessage());
+    redirect('/visits.php?patient_id=' . $patientId);
+  }
 
   flash_set('ok','Kunjungan tersimpan. No: ' . $visitNo);
   redirect('/visits.php?patient_id=' . $patientId);
 }
 
+// ===== UPDATE VISIT (jaga aman: tidak pakai updated_at) =====
 if ($action === 'update_visit') {
   $id = (int)($_POST['id'] ?? 0);
   $anamnesis = trim($_POST['anamnesis'] ?? '');
@@ -85,8 +154,8 @@ if ($action === 'update_visit') {
   $usg       = trim($_POST['usg_report'] ?? '');
   $therapy   = trim($_POST['therapy'] ?? '');
 
-  db_exec("UPDATE visits SET anamnesis=?, physical_exam=?, usg_report=?, therapy=?, doctor_id=?, updated_at=? WHERE id=?",
-    [$anamnesis, $physical, $usg, $therapy, (int)$u['id'], now_dt(), $id]
+  db_exec("UPDATE visits SET anamnesis=?, physical_exam=?, usg_report=?, therapy=?, doctor_id=? WHERE id=?",
+    [$anamnesis, $physical, $usg, $therapy, (int)($u['id'] ?? 0), $id]
   );
 
   flash_set('ok','Kunjungan diperbarui.');
@@ -157,7 +226,6 @@ if ($patientId <= 0) {
         <input class="input" type="date" name="end" value="<?= e($d2) ?>">
       </div>
       <button class="btn secondary" type="submit">Terapkan</button>
-
       <a class="btn" href="<?= e(url('/patients.php')) ?>">+ Pasien</a>
     </form>
   </div>
@@ -193,7 +261,6 @@ if ($patientId <= 0) {
                 <a class="btn small secondary" href="<?= e(url('/prescriptions.php?visit_id='.(int)$r['handled_visit_id'])) ?>">Resep</a>
                 <a class="btn small secondary" href="<?= e(url('/referrals.php?visit_id='.(int)$r['handled_visit_id'])) ?>">Rujukan</a>
               <?php else: ?>
-                <!-- belum ada visit, status biasanya NEW -->
                 <span class="muted">Belum ditangani</span>
               <?php endif; ?>
             </td>
@@ -206,12 +273,10 @@ if ($patientId <= 0) {
 
   <?php require __DIR__ . '/app/views/partials/footer.php'; ?>
   <?php exit; ?>
-<?php } // end rekap mode ?>
+<?php } ?>
 
 <?php
-/**
- * ===== MODE PER PASIEN (LAMA) =====
- */
+// ===== MODE PER PASIEN (buat kunjungan baru + preview upload USG) =====
 $patient = null;
 if ($patientId > 0) {
   $st = db()->prepare("SELECT * FROM patients WHERE id = ?");
@@ -234,6 +299,15 @@ if ($patientId > 0) {
 $title = "Kunjungan";
 require __DIR__ . '/app/views/partials/header.php';
 ?>
+<style>
+  .usg-upload-row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  .file-hidden{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+  .usg-preview{margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+  .usg-thumb{border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;background:rgba(255,255,255,.03)}
+  .usg-thumb img{width:100%;height:120px;object-fit:cover;border-radius:10px;display:block}
+  .usg-cap{margin-top:6px;font-size:12px;opacity:.85;word-break:break-word}
+</style>
+
 <div class="card">
   <div class="h1">Kunjungan</div>
   <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
@@ -267,7 +341,8 @@ require __DIR__ . '/app/views/partials/header.php';
 
   <div class="card">
     <div class="h1" style="font-size:16px">Tambah Kunjungan Baru</div>
-    <form method="post" class="grid" autocomplete="off">
+
+    <form method="post" class="grid" autocomplete="off" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
       <input type="hidden" name="action" value="create_visit">
       <input type="hidden" name="patient_id" value="<?= (int)$patientId ?>">
@@ -288,6 +363,21 @@ require __DIR__ . '/app/views/partials/header.php';
         <div class="label">Pengobatan / Terapi</div>
         <textarea class="input" name="therapy">Lanjutkan terapi dari dokter sebelumnya</textarea>
       </div>
+
+      <div class="col-12">
+        <div class="h1" style="font-size:16px;margin-top:4px">Foto USG</div>
+        <div class="muted">Upload foto hasil USG (JPG/PNG). Akan ikut tercetak pada "Print Hasil".</div>
+
+        <div class="usg-upload-row" style="margin-top:10px">
+          <input id="usg_images_create" class="file-hidden" type="file" name="usg_images[]" accept=".jpg,.jpeg,.png" multiple>
+          <label class="btn secondary" for="usg_images_create">Pilih Foto</label>
+
+          <input class="input" name="usg_caption[]" placeholder="Caption (opsional, mis: Abdomen, Ginjal kanan)" style="min-width:320px;flex:1">
+        </div>
+
+        <div id="usgPreviewCreate" class="usg-preview" style="display:none"></div>
+      </div>
+
       <div class="col-12" style="display:flex;justify-content:flex-end;gap:10px">
         <button class="btn" type="submit">Simpan Kunjungan</button>
       </div>
@@ -318,6 +408,35 @@ require __DIR__ . '/app/views/partials/header.php';
       </tbody>
     </table>
   </div>
+
+  <script>
+    (function(){
+      const input = document.getElementById('usg_images_create');
+      const wrap  = document.getElementById('usgPreviewCreate');
+      if (!input || !wrap) return;
+
+      input.addEventListener('change', function(){
+        wrap.innerHTML = '';
+        const files = Array.from(input.files || []);
+        if (!files.length) {
+          wrap.style.display = 'none';
+          return;
+        }
+        wrap.style.display = 'grid';
+        files.forEach(f => {
+          const url = URL.createObjectURL(f);
+          const box = document.createElement('div');
+          box.className = 'usg-thumb';
+          box.innerHTML = `<img src="${url}" alt="USG"><div class="usg-cap">${escapeHtml(f.name)}</div>`;
+          wrap.appendChild(box);
+        });
+      });
+
+      function escapeHtml(s){
+        return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+      }
+    })();
+  </script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/app/views/partials/footer.php'; ?>
