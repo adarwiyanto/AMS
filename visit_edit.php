@@ -145,6 +145,10 @@ require __DIR__ . '/app/views/partials/header.php';
 <div class="card">
   <div class="h1">Edit Kunjungan</div>
   <div class="muted">No: <?= e($v['visit_no']) ?> | Pasien: <?= e($v['mrn'].' - '.$v['full_name']) ?></div>
+  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+    <a class="btn small secondary" href="<?= e(url('/sick_letters.php?visit_id='.(int)$id)) ?>">Surat Sakit</a>
+    <a class="btn small secondary" href="<?= e(url('/consents.php?visit_id='.(int)$id)) ?>">Informed Consent</a>
+  </div>
 </div>
 
 <div class="card">

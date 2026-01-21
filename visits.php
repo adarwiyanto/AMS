@@ -401,6 +401,8 @@ require __DIR__ . '/app/views/partials/header.php';
               <a class="btn small" href="<?= e(url('/print_visit.php?id='.(int)$v['id'])) ?>" target="_blank">Print Hasil</a>
               <a class="btn small secondary" href="<?= e(url('/prescriptions.php?visit_id='.(int)$v['id'])) ?>">Resep</a>
               <a class="btn small secondary" href="<?= e(url('/referrals.php?visit_id='.(int)$v['id'])) ?>">Rujukan</a>
+              <a class="btn small secondary" href="<?= e(url('/sick_letters.php?visit_id='.(int)$v['id'])) ?>">Surat Sakit</a>
+              <a class="btn small secondary" href="<?= e(url('/consents.php?visit_id='.(int)$v['id'])) ?>">Informed Consent</a>
             </td>
           </tr>
         <?php endforeach; ?>
