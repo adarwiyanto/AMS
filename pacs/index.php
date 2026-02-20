@@ -24,7 +24,7 @@ require __DIR__ . '/../app/views/partials/header.php';
   </form>
 </div>
 
-<div class="card">
+<div class="card" id="upload">
   <div class="h1" style="font-size:16px">Upload DICOM</div>
   <form method="post" action="<?= e(url('/pacs/upload.php')) ?>" enctype="multipart/form-data" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
     <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
