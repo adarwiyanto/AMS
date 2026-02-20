@@ -36,6 +36,10 @@ $u = $u ?? null;
       <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
       <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
 
+      <?php if ($u && in_array($u['role'], ['superadmin','admin','dokter'], true)): ?>
+        <a href="<?= e(url('/pacs/index.php')) ?>" target="_blank" rel="noopener noreferrer">PACS</a>
+      <?php endif; ?>
+
       <?php if ($u && $u['role'] === 'admin'): ?>
         <div class="nav-sep">Admin</div>
         <a href="<?= e(url('/users.php')) ?>">User & Role</a>
