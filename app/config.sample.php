@@ -29,6 +29,20 @@ return [
     'backups' => __DIR__ . '/../storage/backups',
   ],
 
+
+  'pacs' => [
+    'orthanc_url' => 'http://127.0.0.1:8042',
+    'orthanc_user' => '',
+    'orthanc_pass' => '',
+    'ohif_base_url' => 'https://domain.tld/ohif/',
+    'token_secret' => '',
+    'token_ttl' => 120,
+    'allowed_roles' => ['superadmin','admin','dokter'],
+    'max_upload_mb' => 200,
+    'dicomweb_path' => '/dicom-web',
+    'issuer' => 'ams',
+  ],
+
   // Google Drive (opsional) - isi jika ingin upload backup
   'gdrive' => [
     'enabled' => false,
