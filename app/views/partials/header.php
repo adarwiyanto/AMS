@@ -36,10 +36,11 @@ $isPacsPage = strpos($scriptName, '/pacs/') !== false;
         <div class="nav-sep">PACS</div>
         <a href="<?= e(url('/index.php')) ?>">← Kembali ke AMS</a>
         <a href="<?= e(url('/pacs/index.php')) ?>">Dashboard PACS</a>
-        <a href="<?= e(url('/pacs/index.php#upload')) ?>">Upload DICOM</a>
-        <?php if ($u && $u['role'] === 'admin'): ?>
-          <a href="<?= e(url('/pacs/settings.php')) ?>">Setting PACS</a>
-        <?php endif; ?>
+        <a href="<?= e(url('/ohif/')) ?>" target="_blank" rel="noopener">Viewer OHIF</a>
+        <a href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM</a>
+        <a href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
+        <a href="<?= e(url('/pacs/patients.php')) ?>">Patients</a>
+        <a href="<?= e(url('/pacs/settings.php')) ?>">Settings</a>
 
         <div class="nav-sep">Akun</div>
         <a href="<?= e(url('/profile.php')) ?>">Profile</a>
@@ -51,8 +52,13 @@ $isPacsPage = strpos($scriptName, '/pacs/') !== false;
         <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
         <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
 
-        <?php if ($u && in_array($u['role'], ['superadmin','admin','dokter'], true)): ?>
-          <a href="<?= e(url('/pacs/index.php')) ?>">PACS</a>
+        <?php if ($u): ?>
+          <div class="nav-sep">PACS</div>
+          <a href="<?= e(url('/ohif/')) ?>" target="_blank" rel="noopener">Viewer OHIF</a>
+          <a href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM</a>
+          <a href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
+          <a href="<?= e(url('/pacs/patients.php')) ?>">Patients</a>
+          <a href="<?= e(url('/pacs/settings.php')) ?>">Settings</a>
         <?php endif; ?>
 
         <?php if ($u && $u['role'] === 'admin'): ?>
