@@ -1,137 +1,82 @@
 <?php
 require_once __DIR__ . '/lib/pacs_bootstrap.php';
+$u = pacs_require_login();
+$settings = get_settings();
+$title = 'Upload DICOM';
+$maxMb = (int)($settings['pacs_max_upload_mb'] ?? 512);
+require __DIR__ . '/../app/views/partials/header.php';
+?>
+<div class="card">
+  <div class="h1">Upload DICOM</div>
+  <div class="muted">Upload multi file .dcm atau .zip, metadata diparse di browser.</div>
+  <form id="dicomUploadForm" method="post" enctype="multipart/form-data" action="<?= e(url('/pacs/api/upload_handler.php')) ?>">
+    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+    <input class="input" type="file" name="dicom_files[]" id="dicomFiles" accept=".dcm,.zip,application/dicom,application/zip" multiple required>
+    <div class="muted" style="margin:8px 0">Maksimum upload: <?= e((string)$maxMb) ?> MB.</div>
+    <button class="btn" type="submit">Upload</button>
+  </form>
+  <pre id="uploadLog" style="background:#111;color:#8f8;padding:10px;min-height:100px;white-space:pre-wrap"></pre>
+</div>
+<script src="<?= e(url('/pacs/assets/dicomParser.min.js')) ?>"></script>
+<script>
+const form = document.getElementById('dicomUploadForm');
+const logEl = document.getElementById('uploadLog');
+const filesEl = document.getElementById('dicomFiles');
+const tagMap = {
+  patientName: 'x00100010',
+  patientId: 'x00100020',
+  studyUid: 'x0020000d',
+  seriesUid: 'x0020000e',
+  sopUid: 'x00080018',
+  modality: 'x00080060',
+  studyDate: 'x00080020',
+};
 
-$u = pacs_current_user_or_forbidden();
-csrf_validate();
+const printLog = msg => logEl.textContent += msg + "\n";
 
-if (!is_post()) {
-  redirect('/pacs/index.php');
+async function parseDicomMeta(file) {
+  const buf = await file.arrayBuffer();
+  const byteArray = new Uint8Array(buf);
+  const ds = window.dicomParser.parseDicom(byteArray);
+  return {
+    PatientName: ds.string(tagMap.patientName) || '',
+    PatientID: ds.string(tagMap.patientId) || '',
+    StudyInstanceUID: ds.string(tagMap.studyUid) || '',
+    SeriesInstanceUID: ds.string(tagMap.seriesUid) || '',
+    SOPInstanceUID: ds.string(tagMap.sopUid) || '',
+    Modality: ds.string(tagMap.modality) || '',
+    StudyDate: ds.string(tagMap.studyDate) || '',
+  };
 }
 
-if (empty($_FILES['dicom_file']) || !is_array($_FILES['dicom_file'])) {
-  flash_set('err', 'File tidak ditemukan.');
-  redirect('/pacs/index.php');
-}
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  logEl.textContent = '';
+  const files = Array.from(filesEl.files || []);
+  if (!files.length) return;
+  const fd = new FormData();
+  fd.append('_csrf', form.querySelector('[name="_csrf"]').value);
+  const metadata = {};
 
-$file = $_FILES['dicom_file'];
-if ((int)$file['error'] !== UPLOAD_ERR_OK) {
-  flash_set('err', 'Upload gagal dengan kode error ' . (int)$file['error']);
-  redirect('/pacs/index.php');
-}
-
-$cfg = pacs_config();
-$maxBytes = (int)$cfg['max_upload_mb'] * 1024 * 1024;
-if ((int)$file['size'] > $maxBytes) {
-  flash_set('err', 'Ukuran file melebihi batas ' . (int)$cfg['max_upload_mb'] . ' MB.');
-  redirect('/pacs/index.php');
-}
-
-$filename = (string)$file['name'];
-$ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-if (!in_array($ext, ['dcm', 'zip'], true)) {
-  flash_set('err', 'Hanya file .dcm atau .zip yang diizinkan.');
-  redirect('/pacs/index.php');
-}
-
-$uploaded = [];
-$tempRoot = sys_get_temp_dir() . '/ams_pacs_' . bin2hex(random_bytes(6));
-@mkdir($tempRoot, 0700, true);
-
-try {
-  if ($ext === 'dcm') {
-    $content = file_get_contents($file['tmp_name']);
-    if ($content === false) {
-      throw new RuntimeException('Gagal membaca file DICOM.');
-    }
-    $uploaded[] = pacs_orthanc_upload_instance($content);
-  } else {
-    $zip = new ZipArchive();
-    if ($zip->open($file['tmp_name']) !== true) {
-      throw new RuntimeException('Gagal membuka ZIP.');
-    }
-
-    $extractDir = $tempRoot . '/extract';
-    @mkdir($extractDir, 0700, true);
-
-    for ($i = 0; $i < $zip->numFiles; $i++) {
-      $entry = $zip->getNameIndex($i);
-      if ($entry === false || substr($entry, -1) === '/') {
-        continue;
-      }
-      if (strpos($entry, '..') !== false) {
-        continue;
-      }
-
-      $stream = $zip->getStream($entry);
-      if (!$stream) {
-        continue;
-      }
-      $content = stream_get_contents($stream);
-      fclose($stream);
-      if ($content === false || $content === '') {
-        continue;
-      }
-
+  for (const file of files) {
+    fd.append('dicom_files[]', file, file.name);
+    if (file.name.toLowerCase().endsWith('.dcm')) {
       try {
-        $uploaded[] = pacs_orthanc_upload_instance($content);
-      } catch (Throwable $inner) {
-        continue;
+        metadata[file.name] = await parseDicomMeta(file);
+        printLog(`OK parse metadata: ${file.name}`);
+      } catch (_) {
+        printLog(`Skip parse metadata (invalid DICOM): ${file.name}`);
       }
     }
-
-    $zip->close();
   }
 
-  if (!$uploaded) {
-    throw new RuntimeException('Tidak ada instance DICOM valid yang berhasil di-upload.');
+  fd.append('metadata_json', JSON.stringify(metadata));
+  const res = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin' });
+  const json = await res.json();
+  printLog(JSON.stringify(json, null, 2));
+  if (json.ok) {
+    window.location.href = '<?= e(url('/pacs/studies.php')) ?>';
   }
-
-  $saved = 0;
-  foreach ($uploaded as $item) {
-    $instanceId = (string)($item['ID'] ?? '');
-    $parentStudy = (string)($item['ParentStudy'] ?? '');
-    if ($instanceId === '') {
-      continue;
-    }
-
-    $instanceTags = pacs_orthanc_instance_tags($instanceId);
-    $studyTags = $parentStudy !== '' ? pacs_orthanc_study_main_tags($parentStudy) : [];
-    $meta = pacs_build_study_meta($instanceTags, $studyTags);
-    if (($meta['study_uid'] ?? '') === '') {
-      continue;
-    }
-
-    db_exec(
-      'INSERT INTO pacs_studies (user_id, patient_name, patient_id, study_date, modality, study_uid, orthanc_id, source, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-      [
-        (int)$u['id'],
-        $meta['patient_name'],
-        $meta['patient_id'],
-        $meta['study_date'],
-        $meta['modality'],
-        $meta['study_uid'],
-        $parentStudy,
-        'upload',
-        now_dt(),
-      ]
-    );
-
-    pacs_audit_log((int)$u['id'], 'UPLOAD', $meta['study_uid']);
-    $saved++;
-  }
-
-  if ($saved <= 0) {
-    throw new RuntimeException('Upload berhasil, namun metadata studi tidak ditemukan.');
-  }
-
-  flash_set('ok', 'Upload berhasil. Studi tersimpan: ' . $saved);
-} catch (Throwable $e) {
-  log_app('error', 'PACS upload failed', ['err' => $e->getMessage()]);
-  flash_set('err', 'Upload PACS gagal: ' . $e->getMessage());
-}
-
-if (is_dir($tempRoot)) {
-  @exec('rm -rf ' . escapeshellarg($tempRoot));
-}
-
-redirect('/pacs/index.php');
+});
+</script>
+<?php require __DIR__ . '/../app/views/partials/footer.php';
