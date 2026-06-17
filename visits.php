@@ -9,6 +9,8 @@ $u = auth_user();
 $settings = get_settings();
 csrf_validate();
 
+$physicalDefaultTemplate = "TD :\nNadi :\nRespirasi :\nSuhu :\nPemeriksaan lainnya :";
+
 $patientId = (int)($_GET['patient_id'] ?? 0);
 $action = $_POST['action'] ?? '';
 
@@ -104,6 +106,9 @@ if ($action === 'create_visit') {
   $anamnesis = trim($_POST['anamnesis'] ?? '');
   $physical  = trim($_POST['physical_exam'] ?? '');
   $usg       = trim($_POST['usg_report'] ?? '');
+  $diagnosis = trim($_POST['diagnosis'] ?? '');
+  $diagnosisIcd10 = trim($_POST['diagnosis_icd10'] ?? '');
+  $usgIcd9 = trim($_POST['usg_icd9'] ?? '');
   $therapy   = trim($_POST['therapy'] ?? 'Lanjutkan terapi dari dokter sebelumnya');
 
   if ($patientId <= 0) {
@@ -112,9 +117,9 @@ if ($action === 'create_visit') {
   }
 
   $visitNo = next_visit_no();
-  db_exec("INSERT INTO visits(patient_id, visit_no, visit_date, anamnesis, physical_exam, usg_report, therapy, doctor_id, created_at)
-           VALUES(?,?,?,?,?,?,?,?,?)",
-    [$patientId, $visitNo, now_dt(), $anamnesis, $physical, $usg, $therapy, (int)($u['id'] ?? 0), now_dt()]
+  db_exec("INSERT INTO visits(patient_id, visit_no, visit_date, anamnesis, physical_exam, usg_report, diagnosis, diagnosis_icd10, usg_icd9, therapy, doctor_id, created_at)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+    [$patientId, $visitNo, now_dt(), $anamnesis, $physical, $usg, $diagnosis, $diagnosisIcd10, $usgIcd9, $therapy, (int)($u['id'] ?? 0), now_dt()]
   );
 
   $newVisitId = (int)db()->lastInsertId();
@@ -152,10 +157,13 @@ if ($action === 'update_visit') {
   $anamnesis = trim($_POST['anamnesis'] ?? '');
   $physical  = trim($_POST['physical_exam'] ?? '');
   $usg       = trim($_POST['usg_report'] ?? '');
+  $diagnosis = trim($_POST['diagnosis'] ?? '');
+  $diagnosisIcd10 = trim($_POST['diagnosis_icd10'] ?? '');
+  $usgIcd9 = trim($_POST['usg_icd9'] ?? '');
   $therapy   = trim($_POST['therapy'] ?? '');
 
-  db_exec("UPDATE visits SET anamnesis=?, physical_exam=?, usg_report=?, therapy=?, doctor_id=? WHERE id=?",
-    [$anamnesis, $physical, $usg, $therapy, (int)($u['id'] ?? 0), $id]
+  db_exec("UPDATE visits SET anamnesis=?, physical_exam=?, usg_report=?, diagnosis=?, diagnosis_icd10=?, usg_icd9=?, therapy=?, doctor_id=? WHERE id=?",
+    [$anamnesis, $physical, $usg, $diagnosis, $diagnosisIcd10, $usgIcd9, $therapy, (int)($u['id'] ?? 0), $id]
   );
 
   flash_set('ok','Kunjungan diperbarui.');
@@ -353,11 +361,23 @@ require __DIR__ . '/app/views/partials/header.php';
       </div>
       <div class="col-12">
         <div class="label">Pemeriksaan Fisik</div>
-        <textarea class="input" name="physical_exam"></textarea>
+        <textarea class="input" name="physical_exam"><?= e($physicalDefaultTemplate) ?></textarea>
       </div>
       <div class="col-12">
         <div class="label">Laporan USG</div>
         <textarea class="input" name="usg_report"></textarea>
+      </div>
+      <div class="col-12">
+        <div class="label">Diagnosa Akhir</div>
+        <textarea class="input" name="diagnosis" rows="3"></textarea>
+      </div>
+      <div class="col-6">
+        <div class="label">ICD-10 Diagnosa</div>
+        <input class="input" name="diagnosis_icd10" placeholder="Contoh: N64.4">
+      </div>
+      <div class="col-6">
+        <div class="label">ICD-9 Hasil USG</div>
+        <input class="input" name="usg_icd9" placeholder="Contoh: 88.76">
       </div>
       <div class="col-12">
         <div class="label">Pengobatan / Terapi</div>

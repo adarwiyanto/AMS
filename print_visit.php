@@ -103,6 +103,20 @@ $age = age_from_dob($v['dob']);
       <div class="label2">Laporan USG</div>
       <pre><?= e($v['usg_report'] ?? '') ?></pre>
 
+      <?php if (trim((string)($v['diagnosis'] ?? '')) !== '' || trim((string)($v['diagnosis_icd10'] ?? '')) !== '' || trim((string)($v['usg_icd9'] ?? '')) !== ''): ?>
+        <div class="block">
+          <div class="label2">Diagnosa Akhir</div>
+          <pre><?= e($v['diagnosis'] ?? '') ?></pre>
+          <?php if (trim((string)($v['diagnosis_icd10'] ?? '')) !== '' || trim((string)($v['usg_icd9'] ?? '')) !== ''): ?>
+            <div style="margin-top:4px;font-size:12px;color:#333">
+              <?php if (trim((string)($v['diagnosis_icd10'] ?? '')) !== ''): ?>ICD-10: <?= e($v['diagnosis_icd10']) ?><?php endif; ?>
+              <?php if (trim((string)($v['diagnosis_icd10'] ?? '')) !== '' && trim((string)($v['usg_icd9'] ?? '')) !== ''): ?> | <?php endif; ?>
+              <?php if (trim((string)($v['usg_icd9'] ?? '')) !== ''): ?>ICD-9 USG: <?= e($v['usg_icd9']) ?><?php endif; ?>
+            </div>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+
       <?php if (!empty($usgImages)): ?>
         <div style="margin-top:10px" class="label2">Foto USG</div>
         <div class="usggrid">
