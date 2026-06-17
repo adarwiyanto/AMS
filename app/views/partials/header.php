@@ -35,6 +35,7 @@ $u = $u ?? null;
       <a href="<?= e(url('/index.php')) ?>">Dashboard</a>
       <a href="<?= e(url('/patients.php')) ?>">Pasien</a>
       <a href="<?= e(url('/visits.php')) ?>">Kunjungan</a>
+      <a href="<?= e(url('/pacs/index.php')) ?>" target="_blank" rel="noopener noreferrer">PACS</a>
       <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
       <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
 
