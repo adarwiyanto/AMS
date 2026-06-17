@@ -67,34 +67,13 @@ function pacs_is_probable_dicom(string $path): bool {
   if (!$fh) {
     return false;
   }
-  $head = (string)fread($fh, 1024);
+  $head = (string)fread($fh, 132);
   fclose($fh);
   if (strlen($head) >= 132 && substr($head, 128, 4) === 'DICM') {
     return true;
   }
   $ext = strtolower((string)pathinfo($path, PATHINFO_EXTENSION));
-  if (in_array($ext, ['dcm', 'dicom', 'ima'], true)) {
-    return true;
-  }
-  // Some valid DICOM files do not include the 128-byte preamble + DICM marker.
-  // Detect them conservatively from the first data element so ZIP entries without
-  // .dcm extensions are not discarded before metadata parsing.
-  if (strlen($head) >= 8) {
-    $group = pacs_u16le($head, 0);
-    $elem = pacs_u16le($head, 2);
-    $vr = substr($head, 4, 2);
-    $explicit = (bool)preg_match('/^[A-Z]{2}$/', $vr);
-    $implicitVl = pacs_u32le($head, 4);
-    if (in_array($group, [0x0002, 0x0008, 0x0010, 0x0018, 0x0020, 0x0028], true) && $elem <= 0xFFFF) {
-      if ($explicit) {
-        return true;
-      }
-      if ($implicitVl > 0 && $implicitVl < 1048576) {
-        return true;
-      }
-    }
-  }
-  return false;
+  return in_array($ext, ['dcm', 'dicom', 'ima'], true);
 }
 
 function pacs_current_user_or_forbidden(): array {
@@ -140,145 +119,179 @@ function pacs_clean_dicom_value(string $v): string {
   return trim($v);
 }
 
-function pacs_dicom_read_element(string $blob, int $off, bool $explicit, int $len): ?array {
-  if ($off + 8 > $len) return null;
-  $group = pacs_u16le($blob, $off);
-  $elem = pacs_u16le($blob, $off + 2);
-  $tag = sprintf('%04X,%04X', $group, $elem);
-  $longVr = ['OB'=>true,'OD'=>true,'OF'=>true,'OL'=>true,'OW'=>true,'SQ'=>true,'UC'=>true,'UR'=>true,'UT'=>true,'UN'=>true];
-  $vr = '';
-  $header = 8;
-  $vl = 0;
-  if ($explicit) {
-    $vr = substr($blob, $off + 4, 2);
-    if (!preg_match('/^[A-Z]{2}$/', $vr)) {
-      return null;
-    }
-    if (isset($longVr[$vr])) {
-      if ($off + 12 > $len) return null;
-      $vl = pacs_u32le($blob, $off + 8);
-      $header = 12;
-    } else {
-      $vl = pacs_u16le($blob, $off + 6);
-      $header = 8;
-    }
-  } else {
-    $vl = pacs_u32le($blob, $off + 4);
-    $header = 8;
-  }
-  return ['group'=>$group, 'elem'=>$elem, 'tag'=>$tag, 'vr'=>$vr, 'header'=>$header, 'vl'=>$vl, 'value_off'=>$off + $header];
+function pacs_dicom_is_plausible_uid(string $v): bool {
+  return $v !== '' && strlen($v) <= 128 && preg_match('/^[0-9]+(\.[0-9]+)+$/', $v) === 1;
 }
 
-function pacs_dicom_value_to_string(string $raw): string {
-  return pacs_clean_dicom_value($raw);
+function pacs_dicom_scan_value(string $blob, string $tagBytes, string $vrHint = ''): ?string {
+  $len = strlen($blob);
+  $pos = 0;
+  while (($pos = strpos($blob, $tagBytes, $pos)) !== false) {
+    // Explicit VR: tag + VR + 16-bit VL
+    if ($pos + 8 <= $len) {
+      $vr = substr($blob, $pos + 4, 2);
+      $vl = pacs_u16le($blob, $pos + 6);
+      if (preg_match('/^[A-Z]{2}$/', $vr) && $vl > 0 && $vl < 4096 && $pos + 8 + $vl <= $len) {
+        if ($vrHint === '' || $vr === $vrHint || in_array($vrHint, ['UI','LO','SH','PN','DA','CS','DS','IS'], true)) {
+          $v = pacs_clean_dicom_value(substr($blob, $pos + 8, $vl));
+          if ($v !== '') return $v;
+        }
+      }
+    }
+    // Implicit VR: tag + 32-bit VL
+    if ($pos + 8 <= $len) {
+      $vl = pacs_u32le($blob, $pos + 4);
+      if ($vl > 0 && $vl < 4096 && $pos + 8 + $vl <= $len) {
+        $v = pacs_clean_dicom_value(substr($blob, $pos + 8, $vl));
+        if ($v !== '') return $v;
+      }
+    }
+    $pos += 4;
+  }
+  return null;
 }
 
-function pacs_dicom_value_to_int(string $raw, string $vr = ''): int {
-  $raw = str_pad($raw, 4, "\0");
-  if ($vr === 'SS') {
-    $v = unpack('s', substr($raw, 0, 2));
-    return (int)($v[1] ?? 0);
+function pacs_dicom_scan_u16_value(string $blob, string $tagBytes): ?string {
+  $len = strlen($blob);
+  $pos = 0;
+  while (($pos = strpos($blob, $tagBytes, $pos)) !== false) {
+    // Explicit VR US/SS with 16-bit VL.
+    if ($pos + 10 <= $len) {
+      $vr = substr($blob, $pos + 4, 2);
+      $vl = pacs_u16le($blob, $pos + 6);
+      if (preg_match('/^[A-Z]{2}$/', $vr) && $vl >= 2 && $vl <= 4 && $pos + 8 + $vl <= $len) {
+        return (string)pacs_u16le($blob, $pos + 8);
+      }
+    }
+    // Implicit VR with 32-bit VL.
+    if ($pos + 10 <= $len) {
+      $vl = pacs_u32le($blob, $pos + 4);
+      if ($vl >= 2 && $vl <= 4 && $pos + 8 + $vl <= $len) {
+        return (string)pacs_u16le($blob, $pos + 8);
+      }
+    }
+    $pos += 4;
   }
-  $text = pacs_clean_dicom_value($raw);
-  if ($text !== '' && preg_match('/^-?\d+/', $text, $m)) {
-    return (int)$m[0];
-  }
-  return pacs_u16le($raw, 0);
+  return null;
 }
 
 function pacs_read_dicom_metadata(string $path): array {
   $meta = [];
-  $blob = @file_get_contents($path, false, null, 0, 8388608);
+  $blob = @file_get_contents($path, false, null, 0, 4 * 1024 * 1024);
   if (!is_string($blob) || $blob === '') {
     return $meta;
   }
   $len = strlen($blob);
   $off = ($len >= 132 && substr($blob, 128, 4) === 'DICM') ? 132 : 0;
   $wanted = [
-    '0002,0010' => 'TransferSyntaxUID',
-    '0008,0016' => 'SOPClassUID',
-    '0008,0018' => 'SOPInstanceUID',
-    '0008,0020' => 'StudyDate',
-    '0008,0050' => 'AccessionNumber',
-    '0008,0060' => 'Modality',
-    '0008,1030' => 'StudyDescription',
-    '0008,103E' => 'SeriesDescription',
-    '0010,0010' => 'PatientName',
-    '0010,0020' => 'PatientID',
-    '0010,0030' => 'PatientBirthDate',
-    '0010,0040' => 'PatientSex',
-    '0020,000D' => 'StudyInstanceUID',
-    '0020,000E' => 'SeriesInstanceUID',
-    '0020,0011' => 'SeriesNumber',
-    '0020,0013' => 'InstanceNumber',
-    '0028,0002' => 'SamplesPerPixel',
-    '0028,0004' => 'PhotometricInterpretation',
-    '0028,0008' => 'NumberOfFrames',
-    '0028,0010' => 'Rows',
-    '0028,0011' => 'Columns',
-    '0028,0100' => 'BitsAllocated',
-    '0028,0101' => 'BitsStored',
-    '0028,0103' => 'PixelRepresentation',
-    '0028,1050' => 'WindowCenter',
-    '0028,1051' => 'WindowWidth',
-    '0028,1052' => 'RescaleIntercept',
-    '0028,1053' => 'RescaleSlope',
+    '0008,0016' => ['SOPClassUID','UI'],
+    '0008,0018' => ['SOPInstanceUID','UI'],
+    '0008,0020' => ['StudyDate','DA'],
+    '0008,0050' => ['AccessionNumber','SH'],
+    '0008,0060' => ['Modality','CS'],
+    '0008,1030' => ['StudyDescription','LO'],
+    '0008,103E' => ['SeriesDescription','LO'],
+    '0010,0010' => ['PatientName','PN'],
+    '0010,0020' => ['PatientID','LO'],
+    '0010,0030' => ['PatientBirthDate','DA'],
+    '0010,0040' => ['PatientSex','CS'],
+    '0020,000D' => ['StudyInstanceUID','UI'],
+    '0020,000E' => ['SeriesInstanceUID','UI'],
+    '0020,0011' => ['SeriesNumber','IS'],
+    '0020,0013' => ['InstanceNumber','IS'],
+    '0028,0002' => ['SamplesPerPixel','US'],
+    '0028,0004' => ['PhotometricInterpretation','CS'],
+    '0028,0008' => ['NumberOfFrames','IS'],
+    '0028,0010' => ['Rows','US'],
+    '0028,0011' => ['Columns','US'],
+    '0028,0100' => ['BitsAllocated','US'],
+    '0028,0101' => ['BitsStored','US'],
+    '0028,0103' => ['PixelRepresentation','US'],
+    '0028,1050' => ['WindowCenter','DS'],
+    '0028,1051' => ['WindowWidth','DS'],
+    '0028,1052' => ['RescaleIntercept','DS'],
+    '0028,1053' => ['RescaleSlope','DS'],
   ];
-  $intTags = ['0028,0010'=>true,'0028,0011'=>true,'0028,0100'=>true,'0028,0101'=>true,'0028,0103'=>true,'0020,0011'=>true,'0020,0013'=>true,'0028,0002'=>true];
-  $ts = '';
-  $datasetExplicit = true;
+  $longVr = ['OB'=>true,'OD'=>true,'OF'=>true,'OL'=>true,'OW'=>true,'SQ'=>true,'UC'=>true,'UR'=>true,'UT'=>true,'UN'=>true];
   $iterations = 0;
-
-  while ($off + 8 <= $len && $iterations++ < 200000) {
-    // Group 0002 File Meta Information is always Explicit VR Little Endian.
-    $peekGroup = pacs_u16le($blob, $off);
-    $explicit = ($peekGroup === 0x0002) ? true : $datasetExplicit;
-    $el = pacs_dicom_read_element($blob, $off, $explicit, $len);
-
-    // If a dataset is actually implicit and we guessed explicit, retry as implicit.
-    if (!$el && $peekGroup !== 0x0002 && $datasetExplicit) {
-      $datasetExplicit = false;
-      $el = pacs_dicom_read_element($blob, $off, false, $len);
-    }
-    if (!$el) break;
-
-    $tag = $el['tag'];
-    $vl = (int)$el['vl'];
-    $valueOff = (int)$el['value_off'];
-    if ($el['group'] === 0x7FE0 && $el['elem'] === 0x0010) break;
-    if ($el['group'] === 0 && $el['elem'] === 0) break;
-    if ($vl === 0xFFFFFFFF) break;
-    if ($vl < 0 || $vl > 100000000) break;
-    if ($valueOff > $len) break;
-
-    if (isset($wanted[$tag]) && $vl > 0 && $valueOff + min($vl, 4096) <= $len) {
-      $raw = substr($blob, $valueOff, min($vl, 4096));
-      if (isset($intTags[$tag]) && $vl <= 16) {
-        $meta[$wanted[$tag]] = (string)pacs_dicom_value_to_int($raw, (string)$el['vr']);
+  while ($off + 8 <= $len && $iterations++ < 60000) {
+    $group = pacs_u16le($blob, $off);
+    $elem = pacs_u16le($blob, $off + 2);
+    if ($group === 0x7FE0 && $elem === 0x0010) break;
+    if ($group === 0 && $elem === 0) { $off++; continue; }
+    $tag = sprintf('%04X,%04X', $group, $elem);
+    $vr = substr($blob, $off + 4, 2);
+    $header = 8;
+    $vl = 0;
+    if (preg_match('/^[A-Z]{2}$/', $vr)) {
+      if (isset($longVr[$vr])) {
+        if ($off + 12 > $len) break;
+        $vl = pacs_u32le($blob, $off + 8);
+        $header = 12;
       } else {
-        $meta[$wanted[$tag]] = pacs_dicom_value_to_string($raw);
+        $vl = pacs_u16le($blob, $off + 6);
+        $header = 8;
       }
-      if ($tag === '0002,0010') {
-        $ts = trim((string)$meta['TransferSyntaxUID']);
+    } else {
+      $vr = '';
+      $vl = pacs_u32le($blob, $off + 4);
+      $header = 8;
+    }
+    if ($vl < 0 || $vl > 10000000) { $off++; continue; }
+    $valueOff = $off + $header;
+    if ($valueOff > $len) break;
+    if (isset($wanted[$tag]) && $vl > 0 && $valueOff + min($vl, 4096) <= $len) {
+      [$key, $expectedVr] = $wanted[$tag];
+      $raw = substr($blob, $valueOff, min($vl, 4096));
+      if (in_array($expectedVr, ['US','SS'], true) && $vl <= 4) {
+        $meta[$key] = (string)pacs_u16le($raw . "\0\0", 0);
+      } else {
+        $meta[$key] = pacs_clean_dicom_value($raw);
       }
     }
-
-    $step = (int)$el['header'] + $vl + ($vl % 2);
-    if ($step <= 0) break;
+    $step = $header + $vl + ($vl % 2);
+    if ($step <= 0) { $off++; continue; }
     $off += $step;
-
-    if ($peekGroup === 0x0002 && $off + 4 <= $len && pacs_u16le($blob, $off) !== 0x0002) {
-      // Switch transfer syntax after File Meta Information.
-      // 1.2.840.10008.1.2 = Implicit VR Little Endian.
-      // 1.2.840.10008.1.2.1 = Explicit VR Little Endian.
-      // Encapsulated transfer syntaxes may still have readable metadata, but pixel
-      // rendering is intentionally blocked in the browser viewer.
-      $datasetExplicit = ($ts !== '1.2.840.10008.1.2');
-    }
   }
 
-  if (!empty($meta['WindowCenter'])) $meta['WindowCenter'] = explode('\\', (string)$meta['WindowCenter'])[0];
-  if (!empty($meta['WindowWidth'])) $meta['WindowWidth'] = explode('\\', (string)$meta['WindowWidth'])[0];
-  if (!empty($meta['NumberOfFrames'])) $meta['NumberOfFrames'] = explode('\\', (string)$meta['NumberOfFrames'])[0];
+  // Fallback scanner for vendor files / no preamble / parser alignment issues.
+  $scanMap = [
+    "\x08\x00\x18\x00" => ['SOPInstanceUID','UI'],
+    "\x20\x00\x0D\x00" => ['StudyInstanceUID','UI'],
+    "\x20\x00\x0E\x00" => ['SeriesInstanceUID','UI'],
+    "\x10\x00\x20\x00" => ['PatientID','LO'],
+    "\x10\x00\x10\x00" => ['PatientName','PN'],
+    "\x08\x00\x20\x00" => ['StudyDate','DA'],
+    "\x08\x00\x60\x00" => ['Modality','CS'],
+    "\x08\x00\x30\x10" => ['StudyDescription','LO'],
+    "\x08\x00\x3E\x10" => ['SeriesDescription','LO'],
+    "\x20\x00\x11\x00" => ['SeriesNumber','IS'],
+    "\x20\x00\x13\x00" => ['InstanceNumber','IS'],
+    "\x28\x00\x08\x00" => ['NumberOfFrames','IS'],
+  ];
+  foreach ($scanMap as $tagBytes => [$key, $vr]) {
+    if (!empty($meta[$key])) continue;
+    $v = pacs_dicom_scan_value($blob, $tagBytes, $vr);
+    if ($v !== null) $meta[$key] = $v;
+  }
+  $u16Map = [
+    "\x28\x00\x10\x00" => 'Rows',
+    "\x28\x00\x11\x00" => 'Columns',
+    "\x28\x00\x00\x01" => 'BitsAllocated',
+    "\x28\x00\x01\x01" => 'BitsStored',
+    "\x28\x00\x03\x01" => 'PixelRepresentation',
+    "\x28\x00\x02\x00" => 'SamplesPerPixel',
+  ];
+  foreach ($u16Map as $tagBytes => $key) {
+    if (!empty($meta[$key])) continue;
+    $v = pacs_dicom_scan_u16_value($blob, $tagBytes);
+    if ($v !== null) $meta[$key] = $v;
+  }
+
+  foreach (['SOPInstanceUID','StudyInstanceUID','SeriesInstanceUID'] as $k) {
+    if (!empty($meta[$k])) {
+      $meta[$k] = trim((string)$meta[$k], " \t\r\n\0");
+    }
+  }
   return $meta;
 }

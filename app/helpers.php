@@ -69,11 +69,8 @@ function csrf_token(): string {
 function csrf_validate(): void {
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (session_status() !== PHP_SESSION_ACTIVE) session_start();
-    $token = $_POST['_csrf'] ?? '';
-    if ($token === '') {
-      $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    }
-    if (!$token || !hash_equals($_SESSION['_csrf'] ?? '', $token)) {
+    $token = $_POST['_csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if (!$token || !hash_equals($_SESSION['_csrf'] ?? '', (string)$token)) {
       http_response_code(419);
       echo "CSRF token invalid.";
       exit;
