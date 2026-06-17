@@ -19,9 +19,11 @@ $isPacsPage = strpos($scriptName, '/pacs/') !== false;
   <style><?= $custom_css ?></style>
 </head>
 <body>
+<div class="sidebar-backdrop no-print" id="sidebarBackdrop" onclick="closeSidebar()" aria-hidden="true"></div>
 <div class="layout">
-  <aside class="sidebar no-print" id="sidebar">
+  <aside class="sidebar no-print" id="sidebar" aria-label="Menu utama">
     <div class="side-brand">
+      <button class="icon-btn sidebar-close" type="button" onclick="closeSidebar()" aria-label="Tutup menu">×</button>
       <?php if ($logo_url): ?>
         <img src="<?= e(url($logo_url)) ?>" class="logo" alt="Logo">
       <?php endif; ?>
@@ -70,13 +72,13 @@ $isPacsPage = strpos($scriptName, '/pacs/') !== false;
     </nav>
 
     <div class="side-footer">
-      <button class="btn small" type="button" onclick="toggleSidebar()">Sembunyikan menu</button>
+      <button class="btn small sidebar-hide-btn" type="button" onclick="toggleSidebar()">Sembunyikan menu</button>
     </div>
   </aside>
 
   <main class="main">
     <header class="topbar no-print">
-      <button class="btn small" type="button" onclick="toggleSidebar()">☰</button>
+      <button class="icon-btn menu-toggle" type="button" onclick="toggleSidebar()" aria-label="Buka menu" aria-controls="sidebar" aria-expanded="false">☰</button>
       <div class="topbar-title"><?= e($brand_title) ?></div>
       <div class="topbar-user"><?= $u ? e($u['full_name']).' ('.e($u['role']).')' : '' ?></div>
     </header>
