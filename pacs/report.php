@@ -36,6 +36,7 @@ $report = $rstmt->fetch() ?: ['report_body'=>'', 'impression'=>'', 'status'=>'dr
 $title = 'Word Processing PACS';
 require __DIR__ . '/../app/views/partials/header.php';
 ?>
+<?= pacs_back_button('/pacs/studies.php') ?>
 <div class="card">
   <div class="h1">Word Processing PACS</div>
   <div class="muted">Study: <code><?= e($studyUid) ?></code></div>
@@ -56,6 +57,7 @@ require __DIR__ . '/../app/views/partials/header.php';
     </select>
     <p>
       <button class="btn" type="submit">Simpan Report</button>
+      <a class="btn secondary" href="<?= e(url('/pacs/viewer.php?study_uid=' . rawurlencode($studyUid))) ?>">Buka Viewer</a>
       <a class="btn secondary" href="<?= e(url('/pacs/launch.php?study_uid=' . rawurlencode($studyUid))) ?>">Buka Native DicomViewer</a>
       <a class="btn secondary" href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
     </p>

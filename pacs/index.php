@@ -39,7 +39,7 @@ require __DIR__ . '/../app/views/partials/header.php';
 ?>
 <div class="card">
   <div class="h1">PACS Dashboard</div>
-  <div class="muted">Modul PACS dengan database terpisah dan bridge ke Native Adena Dicom Viewer.</div>
+  <div class="muted">Modul PACS dengan database terpisah, upload DICOM/ZIP, viewer internal, dan opsi bridge ke Native Adena Dicom Viewer.</div>
 </div>
 
 <?php if (!$pacsReady): ?>
@@ -72,10 +72,10 @@ require __DIR__ . '/../app/views/partials/header.php';
     </div>
   </div>
   <div class="card">
-    <a class="btn" href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM</a>
+    <a class="btn" href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM / ZIP</a>
     <a class="btn secondary" href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
     <a class="btn secondary" href="<?= e(url('/pacs/patients.php')) ?>">Patients</a>
-    <a class="btn secondary" href="<?= e(url('/pacs/studies.php')) ?>">Buka Native DicomViewer dari Study</a>
+    <a class="btn secondary" href="<?= e(url('/pacs/studies.php')) ?>">Buka Viewer dari Study</a>
     <?php if ($u && ($u['role'] ?? '') === 'admin'): ?>
       <a class="btn secondary" href="<?= e(url('/pacs/settings.php')) ?>">Setting PACS</a>
     <?php endif; ?>

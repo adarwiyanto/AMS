@@ -112,6 +112,7 @@ if (is_post()) {
 
 require __DIR__ . '/../app/views/partials/header.php';
 ?>
+<?= pacs_back_button('/pacs/index.php') ?>
 <div class="card">
   <div class="h1">Setting PACS</div>
   <div class="muted">Isi koneksi database PACS dari aplikasi. Password akan disimpan di <code>app/pacs_config.php</code>, bukan di database AMS.</div>

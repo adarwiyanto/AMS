@@ -15,6 +15,7 @@ if ($q !== '') {
 $rows = $stmt->fetchAll();
 require __DIR__ . '/../app/views/partials/header.php';
 ?>
+<?= pacs_back_button('/pacs/index.php') ?>
 <div class="card">
   <div class="h1">Studies</div>
   <form>
@@ -32,7 +33,8 @@ require __DIR__ . '/../app/views/partials/header.php';
         <td><?= e((string)$r['num_series']) ?></td>
         <td><?= e((string)$r['num_instances']) ?></td>
         <td style="white-space:nowrap">
-          <a class="btn small" href="<?= e(url('/pacs/launch.php?study_uid=' . rawurlencode((string)$r['study_uid']))) ?>">Buka Native</a>
+          <a class="btn small" href="<?= e(url('/pacs/viewer.php?study_uid=' . rawurlencode((string)$r['study_uid']))) ?>">Viewer</a>
+          <a class="btn small secondary" href="<?= e(url('/pacs/launch.php?study_uid=' . rawurlencode((string)$r['study_uid']))) ?>">Native</a>
           <a class="btn small secondary" href="<?= e(url('/pacs/report.php?study_uid=' . rawurlencode((string)$r['study_uid']))) ?>">Report</a>
           <a class="btn small secondary" href="<?= e(url('/pacs/link.php?study_uid=' . rawurlencode((string)$r['study_uid']))) ?>">Link AMS</a>
         </td>

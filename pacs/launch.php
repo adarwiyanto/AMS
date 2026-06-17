@@ -34,6 +34,7 @@ $title = 'Buka Native DicomViewer';
 $settings = get_settings();
 require __DIR__ . '/../app/views/partials/header.php';
 ?>
+<?= pacs_back_button('/pacs/studies.php') ?>
 <div class="card">
   <div class="h1">Buka Native DicomViewer</div>
   <p class="muted">Browser akan mencoba membuka aplikasi desktop melalui protocol <code>adena-dicom://</code>.</p>
@@ -41,6 +42,7 @@ require __DIR__ . '/../app/views/partials/header.php';
   <p><b>Pasien DICOM:</b> <?= e((string)($study['patient_name'] ?? '-')) ?> / <?= e((string)($study['patient_id'] ?? '-')) ?></p>
   <p>
     <a class="btn" href="<?= e($nativeUrl) ?>">Buka sekarang</a>
+    <a class="btn secondary" href="<?= e(url('/pacs/viewer.php?study_uid=' . rawurlencode($studyUid))) ?>">Viewer Web</a>
     <a class="btn secondary" href="<?= e(url('/pacs/report.php?study_uid=' . rawurlencode($studyUid))) ?>">Word Processing / Report</a>
     <a class="btn secondary" href="<?= e(url('/pacs/studies.php')) ?>">Kembali ke Studies</a>
   </p>

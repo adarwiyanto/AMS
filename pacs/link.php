@@ -40,6 +40,7 @@ $link = $current->fetch() ?: [];
 $title = 'Link PACS ke AMS';
 require __DIR__ . '/../app/views/partials/header.php';
 ?>
+<?= pacs_back_button('/pacs/studies.php') ?>
 <div class="card">
   <div class="h1">Link Study PACS ke Pasien/Kunjungan AMS</div>
   <div class="muted">Study: <code><?= e($studyUid) ?></code></div>

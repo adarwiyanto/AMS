@@ -6,6 +6,7 @@ $title = 'Pasien DICOM';
 $rows = pacs_db()->query('SELECT p.*, MAX(l.ams_patient_id) AS ams_patient_id FROM pacs_patients p LEFT JOIN pacs_links l ON l.pacs_patient_id = p.patient_id GROUP BY p.id ORDER BY p.created_at DESC LIMIT 200')->fetchAll();
 require __DIR__ . '/../app/views/partials/header.php';
 ?>
+<?= pacs_back_button('/pacs/index.php') ?>
 <div class="card">
   <div class="h1">Pasien DICOM</div>
   <table class="table">
