@@ -6,8 +6,6 @@ $badge = $settings['brand_badge'] ?? 'Adena Medical System';
 $logo_url = $settings['logo_path'] ?? '';
 $custom_css = $settings['custom_css'] ?? '';
 $u = $u ?? null;
-$scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '');
-$isPacsPage = strpos($scriptName, '/pacs/') !== false;
 ?>
 <!doctype html>
 <html lang="id">
@@ -34,47 +32,23 @@ $isPacsPage = strpos($scriptName, '/pacs/') !== false;
     </div>
 
     <nav class="side-nav">
-      <?php if ($isPacsPage): ?>
-        <div class="nav-sep">PACS</div>
-        <a href="<?= e(url('/index.php')) ?>">← Kembali ke AMS</a>
-        <a href="<?= e(url('/pacs/index.php')) ?>">Dashboard PACS</a>
-        <a href="<?= e(url('/ohif/')) ?>" target="_blank" rel="noopener">Viewer OHIF</a>
-        <a href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM</a>
-        <a href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
-        <a href="<?= e(url('/pacs/patients.php')) ?>">Patients</a>
-        <a href="<?= e(url('/pacs/settings.php')) ?>">Settings</a>
+      <a href="<?= e(url('/index.php')) ?>">Dashboard</a>
+      <a href="<?= e(url('/patients.php')) ?>">Pasien</a>
+      <a href="<?= e(url('/visits.php')) ?>">Kunjungan</a>
+      <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
+      <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
 
-        <div class="nav-sep">Akun</div>
-        <a href="<?= e(url('/profile.php')) ?>">Profile</a>
-        <a href="<?= e(url('/logout.php')) ?>">Logout</a>
-      <?php else: ?>
-        <a href="<?= e(url('/index.php')) ?>">Dashboard</a>
-        <a href="<?= e(url('/patients.php')) ?>">Pasien</a>
-        <a href="<?= e(url('/visits.php')) ?>">Kunjungan</a>
-        <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
-        <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
-
-        <?php if ($u): ?>
-          <div class="nav-sep">PACS</div>
-          <a href="<?= e(url('/ohif/')) ?>" target="_blank" rel="noopener">Viewer OHIF</a>
-          <a href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM</a>
-          <a href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
-          <a href="<?= e(url('/pacs/patients.php')) ?>">Patients</a>
-          <a href="<?= e(url('/pacs/settings.php')) ?>">Settings</a>
-        <?php endif; ?>
-
-        <?php if ($u && $u['role'] === 'admin'): ?>
-          <div class="nav-sep">Admin</div>
-          <a href="<?= e(url('/users.php')) ?>">User & Role</a>
-          <a href="<?= e(url('/settings.php')) ?>">Kop Surat & Theme</a>
-          <a href="<?= e(url('/backup.php')) ?>">Backup DB</a>
-          <a href="<?= e(url('/logs.php')) ?>">Log</a>
-        <?php endif; ?>
-
-        <div class="nav-sep">Akun</div>
-        <a href="<?= e(url('/profile.php')) ?>">Profile</a>
-        <a href="<?= e(url('/logout.php')) ?>">Logout</a>
+      <?php if ($u && $u['role'] === 'admin'): ?>
+        <div class="nav-sep">Admin</div>
+        <a href="<?= e(url('/users.php')) ?>">User & Role</a>
+        <a href="<?= e(url('/settings.php')) ?>">Kop Surat & Theme</a>
+        <a href="<?= e(url('/backup.php')) ?>">Backup DB</a>
+        <a href="<?= e(url('/logs.php')) ?>">Log</a>
       <?php endif; ?>
+
+      <div class="nav-sep">Akun</div>
+      <a href="<?= e(url('/profile.php')) ?>">Profile</a>
+      <a href="<?= e(url('/logout.php')) ?>">Logout</a>
     </nav>
 
     <div class="side-footer">
