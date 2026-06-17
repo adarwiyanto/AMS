@@ -242,3 +242,32 @@ select option {
   color:#000 !important;
   background:#fff !important;
 }
+
+/* Collapsible sidebar submenu */
+.nav-group{margin:4px 0}
+.nav-toggle{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  min-height:36px;
+  padding:8px 10px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#334155;
+  font:inherit;
+  font-weight:800;
+  font-size:12px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.nav-toggle:hover{background:var(--surface-soft);color:#1d4ed8}
+.nav-caret{font-size:13px;transition:transform .16s ease;color:var(--muted)}
+.nav-group.open .nav-caret{transform:rotate(90deg)}
+.nav-sub{padding:2px 0 6px 10px;border-left:1px solid var(--line);margin-left:10px}
+.nav-sub a{min-height:32px;font-size:12px;padding:7px 9px}
+.pacs-status-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}
+.pacs-status-item{padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface-soft)}
+@media (max-width:700px){.pacs-status-grid{grid-template-columns:1fr}}

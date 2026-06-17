@@ -9,6 +9,10 @@ return [
     'charset' => 'utf8mb4',
   ],
 
+  'storage' => [
+    'path' => '/home/adey8293/private_uploads/ams_pacs',
+  ],
+
   // Native bridge: browser akan membuka aplikasi desktop melalui custom protocol.
   // DicomViewer native perlu didaftarkan untuk protocol adena-dicom://open.
   'native_bridge' => [

@@ -5,7 +5,9 @@ require_once __DIR__ . '/../../app/db.php';
 require_once __DIR__ . '/../../app/controllers/common.php';
 
 if (!defined('PACS_STORAGE')) {
-  define('PACS_STORAGE', '/home/adey8293/private_uploads/ams_pacs');
+  $pacsCfg = function_exists('pacs_config_local') ? pacs_config_local() : [];
+  $storagePath = $pacsCfg['storage']['path'] ?? '/home/adey8293/private_uploads/ams_pacs';
+  define('PACS_STORAGE', rtrim((string)$storagePath, '/\\'));
 }
 
 if (!function_exists('require_login')) {

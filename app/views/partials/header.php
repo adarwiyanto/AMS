@@ -40,16 +40,31 @@ $u = $u ?? null;
       <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
 
       <?php if ($u && $u['role'] === 'admin'): ?>
-        <div class="nav-sep">Admin</div>
-        <a href="<?= e(url('/users.php')) ?>">User & Role</a>
-        <a href="<?= e(url('/settings.php')) ?>">Kop Surat & Theme</a>
-        <a href="<?= e(url('/backup.php')) ?>">Backup DB</a>
-        <a href="<?= e(url('/logs.php')) ?>">Log</a>
+        <div class="nav-group" data-nav-group="admin">
+          <button class="nav-toggle" type="button" onclick="toggleNavGroup(this)" aria-expanded="false">
+            <span>Admin</span><span class="nav-caret">▸</span>
+          </button>
+          <div class="nav-sub" hidden>
+            <a href="<?= e(url('/users.php')) ?>">User & Role</a>
+            <a href="<?= e(url('/settings.php')) ?>">Kop Surat & Theme</a>
+            <a href="<?= e(url('/backup.php')) ?>">Backup DB</a>
+            <a href="<?= e(url('/logs.php')) ?>">Log</a>
+          </div>
+        </div>
       <?php endif; ?>
 
-      <div class="nav-sep">Akun</div>
-      <a href="<?= e(url('/profile.php')) ?>">Profile</a>
-      <a href="<?= e(url('/logout.php')) ?>">Logout</a>
+      <div class="nav-group" data-nav-group="akun">
+        <button class="nav-toggle" type="button" onclick="toggleNavGroup(this)" aria-expanded="false">
+          <span>Akun</span><span class="nav-caret">▸</span>
+        </button>
+        <div class="nav-sub" hidden>
+          <a href="<?= e(url('/profile.php')) ?>">Profile</a>
+          <?php if ($u && $u['role'] === 'admin'): ?>
+            <a href="<?= e(url('/pacs/settings.php')) ?>">Setting PACS</a>
+          <?php endif; ?>
+          <a href="<?= e(url('/logout.php')) ?>">Logout</a>
+        </div>
+      </div>
     </nav>
 
     <div class="side-footer">
