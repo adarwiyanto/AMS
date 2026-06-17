@@ -26,41 +26,61 @@
     let off = 0;
     if (buf.byteLength >= 132 && str(bytes.slice(128,132)) === 'DICM') off = 132;
     const meta = {}, longVr = {OB:1,OD:1,OF:1,OL:1,OW:1,SQ:1,UC:1,UR:1,UT:1,UN:1};
-    let pixelOffset = -1, pixelLength = 0, explicit = true, loops = 0;
+    let pixelOffset = -1, pixelLength = 0, loops = 0, transferSyntax = '', datasetExplicit = true;
     const tags = {
       '0002,0010':'TransferSyntaxUID','0028,0010':'Rows','0028,0011':'Columns','0028,0100':'BitsAllocated','0028,0101':'BitsStored','0028,0103':'PixelRepresentation','0028,1050':'WindowCenter','0028,1051':'WindowWidth','0028,1052':'RescaleIntercept','0028,1053':'RescaleSlope','0028,0004':'PhotometricInterpretation','0020,0013':'InstanceNumber','0008,0060':'Modality','0008,103E':'SeriesDescription','0010,0010':'PatientName','0010,0020':'PatientID'
     };
-    while (off + 8 <= buf.byteLength && loops++ < 200000) {
-      const group = u16(d, off), elem = u16(d, off+2);
-      const tag = group.toString(16).padStart(4,'0').toUpperCase()+','+elem.toString(16).padStart(4,'0').toUpperCase();
-      let vr = str(bytes.slice(off+4, off+6));
-      let header = 8, vl = 0;
-      if (/^[A-Z]{2}$/.test(vr)) {
-        if (longVr[vr]) { header = 12; vl = u32(d, off+8); }
-        else { header = 8; vl = u16(d, off+6); }
+    const intTags = {'0028,0010':1,'0028,0011':1,'0028,0100':1,'0028,0101':1,'0028,0103':1,'0020,0013':1};
+    function readElement(o, explicit){
+      if (o + 8 > buf.byteLength) return null;
+      const group = u16(d, o), elem = u16(d, o+2);
+      let vr = '', header = 8, vl = 0;
+      if (explicit) {
+        vr = str(bytes.slice(o+4, o+6));
+        if (!/^[A-Z]{2}$/.test(vr)) return null;
+        if (longVr[vr]) { header = 12; if (o + 12 > buf.byteLength) return null; vl = u32(d, o+8); }
+        else { header = 8; vl = u16(d, o+6); }
       } else {
-        explicit = false; vr = ''; header = 8; vl = u32(d, off+4);
+        vl = u32(d, o+4); header = 8;
       }
-      if (tag === '7FE0,0010') { pixelOffset = off + header; pixelLength = vl; break; }
-      if (vl === 0xffffffff || vl > buf.byteLength) break;
-      const vo = off + header;
-      if (tags[tag] && vo + Math.min(vl, 4096) <= buf.byteLength) {
-        if (['0028,0010','0028,0011','0028,0100','0028,0101','0028,0103','0020,0013'].includes(tag) && vl <= 4) meta[tags[tag]] = u16(d, vo);
-        else meta[tags[tag]] = str(bytes.slice(vo, vo + Math.min(vl, 4096))).split('\\')[0];
+      return {group, elem, tag:group.toString(16).padStart(4,'0').toUpperCase()+','+elem.toString(16).padStart(4,'0').toUpperCase(), vr, header, vl, valueOffset:o+header};
+    }
+    while (off + 8 <= buf.byteLength && loops++ < 300000) {
+      const peekGroup = u16(d, off);
+      const explicit = (peekGroup === 0x0002) ? true : datasetExplicit;
+      let el = readElement(off, explicit);
+      if (!el && peekGroup !== 0x0002 && datasetExplicit) {
+        datasetExplicit = false;
+        el = readElement(off, false);
       }
-      const step = header + vl + (vl % 2);
+      if (!el) break;
+      if (el.tag === '7FE0,0010') { pixelOffset = off + el.header; pixelLength = el.vl; break; }
+      if (el.vl === 0xffffffff) break;
+      if (el.vl > buf.byteLength || el.valueOffset > buf.byteLength) break;
+      if (tags[el.tag] && el.vl > 0 && el.valueOffset + Math.min(el.vl, 4096) <= buf.byteLength) {
+        if (intTags[el.tag] && el.vl <= 4) meta[tags[el.tag]] = u16(d, el.valueOffset);
+        else meta[tags[el.tag]] = str(bytes.slice(el.valueOffset, el.valueOffset + Math.min(el.vl, 4096))).split('\\')[0];
+        if (el.tag === '0002,0010') transferSyntax = String(meta.TransferSyntaxUID || '').trim();
+      }
+      const step = el.header + el.vl + (el.vl % 2);
       if (step <= 0) break;
       off += step;
+      if (peekGroup === 0x0002 && off + 4 <= buf.byteLength && u16(d, off) !== 0x0002) {
+        datasetExplicit = transferSyntax !== '1.2.840.10008.1.2';
+      }
     }
-    if (pixelOffset < 0) throw new Error('Pixel Data tidak ditemukan');
+    if (pixelOffset < 0) throw new Error('Pixel Data tidak ditemukan. Metadata mungkin terbaca, tetapi pixel data tidak ditemukan pada file ini.');
     const rows = Number(meta.Rows||0), cols = Number(meta.Columns||0), bits = Number(meta.BitsAllocated||16);
-    if (!rows || !cols) throw new Error('Rows/Columns tidak terbaca');
+    if (!rows || !cols) throw new Error('Rows/Columns tidak terbaca. Kemungkinan transfer syntax/metadata belum didukung.');
     if (![8,16].includes(bits)) throw new Error('BitsAllocated ' + bits + ' belum didukung');
     if (pixelLength === 0xffffffff) {
       const ts = meta.TransferSyntaxUID ? (' TransferSyntaxUID: ' + meta.TransferSyntaxUID + '.') : '';
       throw new Error('Compressed/encapsulated DICOM belum didukung viewer internal.' + ts);
     }
-    return {meta, rows, cols, bits, signed:Number(meta.PixelRepresentation||0)===1, pixelOffset, pixelLength};
+    if (pixelOffset + Math.min(pixelLength, rows * cols * (bits/8)) > buf.byteLength) {
+      throw new Error('Pixel Data tidak lengkap atau file terpotong. Upload ulang study bila file fisik rusak.');
+    }
+    return {meta, rows, cols, bits, signed:Number(meta.PixelRepresentation||0)===1, pixelOffset, pixelLength, transferSyntax};
   }
 
   function renderDicom(parsed, buf){
