@@ -6,6 +6,8 @@ $badge = $settings['brand_badge'] ?? 'Adena Medical System';
 $logo_url = $settings['logo_path'] ?? '';
 $custom_css = $settings['custom_css'] ?? '';
 $u = $u ?? null;
+$scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '');
+$isPacsPage = strpos($scriptName, '/pacs/') !== false;
 ?>
 <!doctype html>
 <html lang="id">
@@ -17,9 +19,11 @@ $u = $u ?? null;
   <style><?= $custom_css ?></style>
 </head>
 <body>
+<div class="sidebar-backdrop no-print" id="sidebarBackdrop" onclick="closeSidebar()" aria-hidden="true"></div>
 <div class="layout">
-  <aside class="sidebar no-print" id="sidebar">
+  <aside class="sidebar no-print" id="sidebar" aria-label="Menu utama">
     <div class="side-brand">
+      <button class="icon-btn sidebar-close" type="button" onclick="closeSidebar()" aria-label="Tutup menu">×</button>
       <?php if ($logo_url): ?>
         <img src="<?= e(url($logo_url)) ?>" class="logo" alt="Logo">
       <?php endif; ?>
@@ -30,33 +34,57 @@ $u = $u ?? null;
     </div>
 
     <nav class="side-nav">
-      <a href="<?= e(url('/index.php')) ?>">Dashboard</a>
-      <a href="<?= e(url('/patients.php')) ?>">Pasien</a>
-      <a href="<?= e(url('/visits.php')) ?>">Kunjungan</a>
-      <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
-      <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
+      <?php if ($isPacsPage): ?>
+        <div class="nav-sep">PACS</div>
+        <a href="<?= e(url('/index.php')) ?>">← Kembali ke AMS</a>
+        <a href="<?= e(url('/pacs/index.php')) ?>">Dashboard PACS</a>
+        <a href="<?= e(url('/ohif/')) ?>" target="_blank" rel="noopener">Viewer OHIF</a>
+        <a href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM</a>
+        <a href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
+        <a href="<?= e(url('/pacs/patients.php')) ?>">Patients</a>
+        <a href="<?= e(url('/pacs/settings.php')) ?>">Settings</a>
 
-      <?php if ($u && $u['role'] === 'admin'): ?>
-        <div class="nav-sep">Admin</div>
-        <a href="<?= e(url('/users.php')) ?>">User & Role</a>
-        <a href="<?= e(url('/settings.php')) ?>">Kop Surat & Theme</a>
-        <a href="<?= e(url('/backup.php')) ?>">Backup DB</a>
-        <a href="<?= e(url('/logs.php')) ?>">Log</a>
+        <div class="nav-sep">Akun</div>
+        <a href="<?= e(url('/profile.php')) ?>">Profile</a>
+        <a href="<?= e(url('/logout.php')) ?>">Logout</a>
+      <?php else: ?>
+        <a href="<?= e(url('/index.php')) ?>">Dashboard</a>
+        <a href="<?= e(url('/patients.php')) ?>">Pasien</a>
+        <a href="<?= e(url('/visits.php')) ?>">Kunjungan</a>
+        <a href="<?= e(url('/prescriptions.php')) ?>">Resep</a>
+        <a href="<?= e(url('/referrals.php')) ?>">Rujukan</a>
+
+        <?php if ($u): ?>
+          <div class="nav-sep">PACS</div>
+          <a href="<?= e(url('/ohif/')) ?>" target="_blank" rel="noopener">Viewer OHIF</a>
+          <a href="<?= e(url('/pacs/upload.php')) ?>">Upload DICOM</a>
+          <a href="<?= e(url('/pacs/studies.php')) ?>">Studies</a>
+          <a href="<?= e(url('/pacs/patients.php')) ?>">Patients</a>
+          <a href="<?= e(url('/pacs/settings.php')) ?>">Settings</a>
+        <?php endif; ?>
+
+        <?php if ($u && $u['role'] === 'admin'): ?>
+          <div class="nav-sep">Admin</div>
+          <a href="<?= e(url('/users.php')) ?>">User & Role</a>
+          <a href="<?= e(url('/settings.php')) ?>">Kop Surat & Theme</a>
+          <a href="<?= e(url('/backup.php')) ?>">Backup DB</a>
+          <a href="<?= e(url('/logs.php')) ?>">Log</a>
+        <?php endif; ?>
+
+        <div class="nav-sep">Akun</div>
+        <a href="<?= e(url('/profile.php')) ?>">Profile</a>
+        <a href="<?= e(url('/logout.php')) ?>">Logout</a>
       <?php endif; ?>
-
-      <div class="nav-sep">Akun</div>
-      <a href="<?= e(url('/profile.php')) ?>">Profile</a>
-      <a href="<?= e(url('/logout.php')) ?>">Logout</a>
     </nav>
 
     <div class="side-footer">
-      <button class="btn small" type="button" onclick="toggleSidebar()">Sembunyikan menu</button>
+      <button class="btn small sidebar-hide-btn" type="button" onclick="toggleSidebar()">Sembunyikan menu</button>
     </div>
   </aside>
 
   <main class="main">
     <header class="topbar no-print">
-      <button class="btn small" type="button" onclick="toggleSidebar()">☰</button>
+      <button class="icon-btn menu-toggle" type="button" onclick="toggleSidebar()" aria-label="Buka menu" aria-controls="sidebar" aria-expanded="false">☰</button>
       <div class="topbar-title"><?= e($brand_title) ?></div>
       <div class="topbar-user"><?= $u ? e($u['full_name']).' ('.e($u['role']).')' : '' ?></div>
     </header>
