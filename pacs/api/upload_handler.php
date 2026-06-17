@@ -5,6 +5,16 @@ $u = pacs_require_login();
 if (!is_post()) {
   pacs_json_response(['ok' => false, 'error' => 'Method not allowed'], 405);
 }
+
+$contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+$postMaxBytes = pacs_ini_bytes((string)ini_get('post_max_size'));
+if ($postMaxBytes > 0 && $contentLength > $postMaxBytes) {
+  pacs_json_response([
+    'ok' => false,
+    'error' => 'Ukuran upload melebihi batas server post_max_size (' . pacs_format_bytes($postMaxBytes) . '). Naikkan post_max_size di cPanel/PHP Selector atau kecilkan ZIP.'
+  ], 413);
+}
+
 csrf_validate();
 
 try {
@@ -192,4 +202,25 @@ function pacs_store_one_file(string $tmpPath, string $originalName, array $metaM
   }
 
   return [$saved + 1, $skipped];
+}
+
+
+function pacs_ini_bytes(string $value): int {
+  $value = trim($value);
+  if ($value === '') return 0;
+  $last = strtolower($value[strlen($value) - 1]);
+  $number = (float)$value;
+  switch ($last) {
+    case 'g': return (int)($number * 1024 * 1024 * 1024);
+    case 'm': return (int)($number * 1024 * 1024);
+    case 'k': return (int)($number * 1024);
+    default: return (int)$number;
+  }
+}
+
+function pacs_format_bytes(int $bytes): string {
+  if ($bytes >= 1073741824) return round($bytes / 1073741824, 2) . ' GB';
+  if ($bytes >= 1048576) return round($bytes / 1048576, 2) . ' MB';
+  if ($bytes >= 1024) return round($bytes / 1024, 2) . ' KB';
+  return $bytes . ' bytes';
 }

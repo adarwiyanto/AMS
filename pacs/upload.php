@@ -47,6 +47,7 @@ require __DIR__ . '/../app/views/partials/header.php';
   const result = document.getElementById('pacsUploadResult');
   const summary = document.getElementById('pacsUploadSummary');
   const errors = document.getElementById('pacsUploadErrors');
+  const csrfInput = form.querySelector('input[name="_csrf"]');
 
   function esc(s){ return String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c])); }
   function setProgress(p){
@@ -71,6 +72,9 @@ require __DIR__ . '/../app/views/partials/header.php';
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '<?= e(url('/pacs/api/upload_handler.php')) ?>', true);
+    if (csrfInput && csrfInput.value) {
+      xhr.setRequestHeader('X-CSRF-Token', csrfInput.value);
+    }
     xhr.upload.onprogress = function(e){
       if (e.lengthComputable) setProgress((e.loaded / e.total) * 100);
     };
