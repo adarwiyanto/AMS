@@ -28,7 +28,7 @@
     const meta = {}, longVr = {OB:1,OD:1,OF:1,OL:1,OW:1,SQ:1,UC:1,UR:1,UT:1,UN:1};
     let pixelOffset = -1, pixelLength = 0, explicit = true, loops = 0;
     const tags = {
-      '0028,0010':'Rows','0028,0011':'Columns','0028,0100':'BitsAllocated','0028,0101':'BitsStored','0028,0103':'PixelRepresentation','0028,1050':'WindowCenter','0028,1051':'WindowWidth','0028,1052':'RescaleIntercept','0028,1053':'RescaleSlope','0028,0004':'PhotometricInterpretation','0020,0013':'InstanceNumber','0008,0060':'Modality','0008,103E':'SeriesDescription','0010,0010':'PatientName','0010,0020':'PatientID'
+      '0002,0010':'TransferSyntaxUID','0028,0010':'Rows','0028,0011':'Columns','0028,0100':'BitsAllocated','0028,0101':'BitsStored','0028,0103':'PixelRepresentation','0028,1050':'WindowCenter','0028,1051':'WindowWidth','0028,1052':'RescaleIntercept','0028,1053':'RescaleSlope','0028,0004':'PhotometricInterpretation','0020,0013':'InstanceNumber','0008,0060':'Modality','0008,103E':'SeriesDescription','0010,0010':'PatientName','0010,0020':'PatientID'
     };
     while (off + 8 <= buf.byteLength && loops++ < 200000) {
       const group = u16(d, off), elem = u16(d, off+2);
@@ -56,7 +56,10 @@
     const rows = Number(meta.Rows||0), cols = Number(meta.Columns||0), bits = Number(meta.BitsAllocated||16);
     if (!rows || !cols) throw new Error('Rows/Columns tidak terbaca');
     if (![8,16].includes(bits)) throw new Error('BitsAllocated ' + bits + ' belum didukung');
-    if (pixelLength === 0xffffffff) throw new Error('Compressed/encapsulated DICOM belum didukung viewer internal');
+    if (pixelLength === 0xffffffff) {
+      const ts = meta.TransferSyntaxUID ? (' TransferSyntaxUID: ' + meta.TransferSyntaxUID + '.') : '';
+      throw new Error('Compressed/encapsulated DICOM belum didukung viewer internal.' + ts);
+    }
     return {meta, rows, cols, bits, signed:Number(meta.PixelRepresentation||0)===1, pixelOffset, pixelLength};
   }
 
@@ -97,8 +100,15 @@
     const inst = activeSeries.instances[activeIndex];
     setStatus('Memuat slice ' + (activeIndex+1) + '/' + activeSeries.instances.length + '...');
     try {
+      if (inst.file_exists === false) {
+        throw new Error('File DICOM fisik tidak ditemukan di storage. Upload ulang study dengan patch restore duplikat ini agar file dipulihkan.');
+      }
       const res = await fetch(inst.wado_url, {credentials:'same-origin'});
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.ok) {
+        let msg = '';
+        try { msg = await res.text(); } catch(_e) {}
+        throw new Error('HTTP ' + res.status + (msg ? ' - ' + msg.slice(0, 160) : ''));
+      }
       const buf = await res.arrayBuffer();
       const parsed = parseDicom(buf);
       if (!Number.isFinite(windowCenter)) windowCenter = parseFloat(parsed.meta.WindowCenter || '40') || 40;
@@ -106,7 +116,7 @@
       renderDicom(parsed, buf);
     } catch(e) {
       ctx.clearRect(0,0,canvas.width,canvas.height);
-      overlay.textContent = 'Tidak dapat menampilkan pixel data.\n' + e.message + '\nGunakan tombol Native App/WADO untuk file compressed.';
+      overlay.textContent = 'Tidak dapat menampilkan pixel data.\n' + e.message + '\nGunakan tombol Native App/WADO untuk DICOM compressed, atau upload ulang bila file fisik hilang.';
       setStatus('Viewer internal belum bisa membaca slice ini: ' + e.message, true);
     }
   }

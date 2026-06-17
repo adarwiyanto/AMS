@@ -6,27 +6,29 @@ function pacs_process_uploaded_file(string $path, string $originalName, array $m
   $maxBytes = pacs_max_upload_bytes();
   $saved = 0;
   $skipped = 0;
+  $restored = 0;
+  $ignored = 0;
   $errors = [];
   $processed = 0;
 
   if (!is_file($path) || filesize($path) <= 0) {
-    return ['saved' => 0, 'skipped' => 0, 'processed' => 0, 'errors' => [$originalName . ': file kosong']];
+    return ['saved' => 0, 'skipped' => 0, 'restored' => 0, 'ignored' => 0, 'processed' => 0, 'errors' => [$originalName . ': file kosong']];
   }
 
   $size = (int)filesize($path);
   if ($size > $maxBytes) {
-    return ['saved' => 0, 'skipped' => 0, 'processed' => 0, 'errors' => [$originalName . ': ukuran melebihi batas PACS']];
+    return ['saved' => 0, 'skipped' => 0, 'restored' => 0, 'ignored' => 0, 'processed' => 0, 'errors' => [$originalName . ': ukuran melebihi batas PACS']];
   }
 
   $ext = strtolower((string)pathinfo($originalName, PATHINFO_EXTENSION));
   if ($ext === 'zip') {
     if (!class_exists('ZipArchive')) {
-      return ['saved' => 0, 'skipped' => 0, 'processed' => 0, 'errors' => [$originalName . ': ekstensi PHP ZipArchive belum aktif di server']];
+      return ['saved' => 0, 'skipped' => 0, 'restored' => 0, 'ignored' => 0, 'processed' => 0, 'errors' => [$originalName . ': ekstensi PHP ZipArchive belum aktif di server']];
     }
 
     $zip = new ZipArchive();
     if ($zip->open($path) !== true) {
-      return ['saved' => 0, 'skipped' => 0, 'processed' => 0, 'errors' => [$originalName . ': zip invalid']];
+      return ['saved' => 0, 'skipped' => 0, 'restored' => 0, 'ignored' => 0, 'processed' => 0, 'errors' => [$originalName . ': zip invalid']];
     }
 
     for ($z = 0; $z < $zip->numFiles; $z++) {
@@ -55,38 +57,43 @@ function pacs_process_uploaded_file(string $path, string $originalName, array $m
       stream_copy_to_stream($stream, $out);
       fclose($stream);
       fclose($out);
-      [$saved, $skipped] = pacs_store_one_file($tmpDicom, basename($entry), $metaMap, $saved, $skipped, $errors);
-      $processed++;
+      [$saved, $skipped, $restored, $ignored, $didProcess] = pacs_store_one_file($tmpDicom, basename($entry), $metaMap, $saved, $skipped, $restored, $ignored, $errors, true);
+      if ($didProcess) $processed++;
       @unlink($tmpDicom);
     }
     $zip->close();
 
-    return ['saved' => $saved, 'skipped' => $skipped, 'processed' => $processed, 'errors' => $errors];
+    return ['saved' => $saved, 'skipped' => $skipped, 'restored' => $restored, 'ignored' => $ignored, 'processed' => $processed, 'errors' => $errors];
   }
 
-  [$saved, $skipped] = pacs_store_one_file($path, $originalName, $metaMap, $saved, $skipped, $errors);
-  $processed++;
+  [$saved, $skipped, $restored, $ignored, $didProcess] = pacs_store_one_file($path, $originalName, $metaMap, $saved, $skipped, $restored, $ignored, $errors, false);
+  if ($didProcess) $processed++;
 
-  return ['saved' => $saved, 'skipped' => $skipped, 'processed' => $processed, 'errors' => $errors];
+  return ['saved' => $saved, 'skipped' => $skipped, 'restored' => $restored, 'ignored' => $ignored, 'processed' => $processed, 'errors' => $errors];
 }
 
 function pacs_merge_upload_results(array $a, array $b): array {
   return [
     'saved' => (int)($a['saved'] ?? 0) + (int)($b['saved'] ?? 0),
     'skipped' => (int)($a['skipped'] ?? 0) + (int)($b['skipped'] ?? 0),
+    'restored' => (int)($a['restored'] ?? 0) + (int)($b['restored'] ?? 0),
+    'ignored' => (int)($a['ignored'] ?? 0) + (int)($b['ignored'] ?? 0),
     'processed' => (int)($a['processed'] ?? 0) + (int)($b['processed'] ?? 0),
     'errors' => array_merge((array)($a['errors'] ?? []), (array)($b['errors'] ?? [])),
   ];
 }
 
-function pacs_store_one_file(string $tmpPath, string $originalName, array $metaMap, int $saved, int $skipped, array &$errors): array {
+function pacs_store_one_file(string $tmpPath, string $originalName, array $metaMap, int $saved, int $skipped, int $restored, int $ignored, array &$errors, bool $quietNonDicom = false): array {
   if (!is_file($tmpPath) || filesize($tmpPath) <= 0) {
     $errors[] = $originalName . ': file kosong';
-    return [$saved, $skipped];
+    return [$saved, $skipped, $restored, $ignored, false];
   }
   if (!pacs_is_probable_dicom($tmpPath)) {
+    if ($quietNonDicom || pacs_is_common_non_dicom_name($originalName)) {
+      return [$saved, $skipped, $restored, $ignored + 1, false];
+    }
     $errors[] = $originalName . ': bukan DICOM';
-    return [$saved, $skipped];
+    return [$saved, $skipped, $restored, $ignored, false];
   }
 
   $parsed = pacs_read_dicom_metadata($tmpPath);
@@ -112,14 +119,33 @@ function pacs_store_one_file(string $tmpPath, string $originalName, array $metaM
 
   if ($studyUid === '' || $seriesUid === '' || $sopUid === '') {
     $errors[] = $originalName . ': metadata UID tidak dapat dibaca';
-    return [$saved, $skipped];
+    return [$saved, $skipped, $restored, $ignored, true];
   }
 
   $pdo = pacs_db();
-  $dup = $pdo->prepare('SELECT id FROM pacs_instances WHERE sop_uid = ? LIMIT 1');
+  $dup = $pdo->prepare('SELECT i.id, f.rel_path FROM pacs_instances i LEFT JOIN pacs_files f ON f.sop_uid = i.sop_uid WHERE i.sop_uid = ? LIMIT 1');
   $dup->execute([$sopUid]);
-  if ($dup->fetch()) {
-    return [$saved, $skipped + 1];
+  $dupRow = $dup->fetch();
+  if ($dupRow) {
+    $relPathExisting = trim((string)($dupRow['rel_path'] ?? ''));
+    $relPathForRestore = pacs_sanitize_rel_path($relPathExisting) ?: pacs_safe_rel_path($studyUid, $seriesUid, $sopUid);
+    $absExisting = rtrim(PACS_STORAGE, '/\\') . '/' . $relPathForRestore;
+    if (!is_file($absExisting) || filesize($absExisting) <= 0) {
+      $dirExisting = dirname($absExisting);
+      if (!is_dir($dirExisting)) {
+        @mkdir($dirExisting, 0755, true);
+      }
+      if (!@copy($tmpPath, $absExisting)) {
+        $errors[] = $originalName . ': duplikat ditemukan tetapi file fisik hilang dan gagal dipulihkan';
+        return [$saved, $skipped + 1, $restored, $ignored, true];
+      }
+      $shaExisting = hash_file('sha256', $absExisting) ?: '';
+      $sizeExisting = filesize($absExisting) ?: 0;
+      $pdo->prepare('INSERT INTO pacs_files (sop_uid, rel_path, file_size, sha256, created_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE rel_path=VALUES(rel_path), file_size=VALUES(file_size), sha256=VALUES(sha256)')
+        ->execute([$sopUid, $relPathForRestore, $sizeExisting, $shaExisting, now_dt()]);
+      return [$saved, $skipped, $restored + 1, $ignored, true];
+    }
+    return [$saved, $skipped + 1, $restored, $ignored, true];
   }
 
   $relPath = pacs_safe_rel_path($studyUid, $seriesUid, $sopUid);
@@ -131,7 +157,7 @@ function pacs_store_one_file(string $tmpPath, string $originalName, array $metaM
 
   if (!@copy($tmpPath, $absPath)) {
     $errors[] = $originalName . ': gagal simpan file';
-    return [$saved, $skipped];
+    return [$saved, $skipped, $restored, $ignored, true];
   }
 
   $sha = hash_file('sha256', $absPath) ?: '';
@@ -165,10 +191,33 @@ function pacs_store_one_file(string $tmpPath, string $originalName, array $metaM
     $pdo->rollBack();
     @unlink($absPath);
     $errors[] = $originalName . ': gagal simpan metadata - ' . $e->getMessage();
-    return [$saved, $skipped];
+    return [$saved, $skipped, $restored, $ignored, true];
   }
 
-  return [$saved + 1, $skipped];
+  return [$saved + 1, $skipped, $restored, $ignored, true];
+}
+
+
+function pacs_is_common_non_dicom_name(string $name): bool {
+  $base = strtolower(basename($name));
+  $ext = strtolower((string)pathinfo($base, PATHINFO_EXTENSION));
+  if (in_array($ext, ['txt','html','htm','js','css','json','map','xml','md','jpg','jpeg','png','gif','svg','ico','pdf'], true)) {
+    return true;
+  }
+  return in_array($base, ['readme', 'readme.txt', 'license', 'license.txt'], true);
+}
+
+function pacs_sanitize_rel_path(string $relPath): string {
+  $relPath = trim($relPath);
+  $relPath = str_replace(chr(92), '/', $relPath);
+  $relPath = ltrim($relPath, '/');
+  if ($relPath === '' || strpos($relPath, '..') !== false || preg_match('#(^|/)\.#', $relPath)) {
+    return '';
+  }
+  if (!preg_match('#^[a-zA-Z0-9._/-]+$#', $relPath)) {
+    return '';
+  }
+  return $relPath;
 }
 
 function pacs_ini_bytes(string $value): int {

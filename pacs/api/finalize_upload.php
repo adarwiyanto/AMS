@@ -74,6 +74,8 @@ try {
     'ok' => true,
     'saved' => $result['saved'],
     'skipped' => $result['skipped'],
+    'restored' => $result['restored'] ?? 0,
+    'ignored' => $result['ignored'] ?? 0,
     'processed' => $result['processed'],
     'errors' => $result['errors'],
   ]);

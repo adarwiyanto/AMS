@@ -16,10 +16,17 @@ $ss->execute([$studyUid]);
 $seriesRows = $ss->fetchAll();
 $series = [];
 foreach ($seriesRows as $sr) {
-  $is = pacs_db()->prepare('SELECT i.*, f.file_size FROM pacs_instances i LEFT JOIN pacs_files f ON f.sop_uid=i.sop_uid WHERE i.series_uid=? ORDER BY COALESCE(i.instance_number,0) ASC, i.id ASC');
+  $is = pacs_db()->prepare('SELECT i.*, f.file_size, f.rel_path FROM pacs_instances i LEFT JOIN pacs_files f ON f.sop_uid=i.sop_uid WHERE i.series_uid=? ORDER BY COALESCE(i.instance_number,0) ASC, i.id ASC');
   $is->execute([(string)$sr['series_uid']]);
   $instances = [];
   foreach ($is->fetchAll() as $ir) {
+    $relPath = trim((string)($ir['rel_path'] ?? ''));
+    $fileOk = false;
+    if ($relPath !== '') {
+      $full = realpath(rtrim(PACS_STORAGE, '/\\') . '/' . $relPath);
+      $root = realpath(PACS_STORAGE);
+      $fileOk = (bool)($full && $root && strpos($full, $root) === 0 && is_file($full));
+    }
     $instances[] = [
       'sop_uid' => (string)$ir['sop_uid'],
       'instance_number' => (int)($ir['instance_number'] ?? 0),
@@ -27,6 +34,7 @@ foreach ($seriesRows as $sr) {
       'cols' => (int)($ir['image_cols'] ?? 0),
       'frames' => (int)($ir['frames'] ?? 1),
       'file_size' => (int)($ir['file_size'] ?? 0),
+      'file_exists' => $fileOk,
       'wado_url' => url('/pacs/wado.php?requestType=WADO&objectUID=' . rawurlencode((string)$ir['sop_uid'])),
     ];
   }

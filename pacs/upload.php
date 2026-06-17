@@ -128,20 +128,22 @@ require __DIR__ . '/../app/views/partials/header.php';
       totalChunks: fileList.reduce((n, f) => n + Math.max(1, Math.ceil(f.size / CHUNK_SIZE)), 0),
       doneChunks: 0
     };
-    const totals = {saved:0, skipped:0, processed:0, errors:[]};
+    const totals = {saved:0, skipped:0, restored:0, ignored:0, processed:0, errors:[]};
 
     try {
       for (let i = 0; i < fileList.length; i++) {
         const one = await uploadOneFile(fileList[i], i, fileList.length, globalState);
         totals.saved += Number(one.saved || 0);
         totals.skipped += Number(one.skipped || 0);
+        totals.restored += Number(one.restored || 0);
+        totals.ignored += Number(one.ignored || 0);
         totals.processed += Number(one.processed || 0);
         if (Array.isArray(one.errors)) totals.errors.push(...one.errors);
       }
       setProgress(100);
       result.style.display = 'block';
       status.innerHTML = '<span style="color:#166534">Upload selesai.</span>';
-      summary.innerHTML = '<div class="alert ok">Tersimpan: <b>' + esc(totals.saved) + '</b> | Duplikat/skipped: <b>' + esc(totals.skipped) + '</b> | Diproses: <b>' + esc(totals.processed) + '</b></div>';
+      summary.innerHTML = '<div class="alert ok">Tersimpan: <b>' + esc(totals.saved) + '</b> | Duplikat/skipped: <b>' + esc(totals.skipped) + '</b> | Dipulihkan: <b>' + esc(totals.restored) + '</b> | Non-DICOM dilewati: <b>' + esc(totals.ignored) + '</b> | DICOM diproses: <b>' + esc(totals.processed) + '</b></div>';
       if (totals.errors.length) {
         errors.innerHTML = '<div class="alert err"><b>Catatan/error:</b><ul style="margin:8px 0 0 18px">' + totals.errors.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
       } else {

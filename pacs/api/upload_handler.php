@@ -33,7 +33,7 @@ if (!$files || !is_array($files['name'] ?? null)) {
   pacs_json_response(['ok' => false, 'error' => 'Tidak ada file upload'], 400);
 }
 
-$result = ['saved' => 0, 'skipped' => 0, 'processed' => 0, 'errors' => []];
+$result = ['saved' => 0, 'skipped' => 0, 'restored' => 0, 'ignored' => 0, 'processed' => 0, 'errors' => []];
 $count = count($files['name']);
 for ($i = 0; $i < $count; $i++) {
   $name = (string)$files['name'][$i];
@@ -53,6 +53,8 @@ pacs_json_response([
   'ok' => true,
   'saved' => $result['saved'],
   'skipped' => $result['skipped'],
+  'restored' => $result['restored'] ?? 0,
+  'ignored' => $result['ignored'] ?? 0,
   'processed' => $result['processed'],
   'errors' => $result['errors'],
 ]);
