@@ -36,9 +36,8 @@ require __DIR__ . '/../app/views/partials/header.php';
       <button class="btn small secondary" type="button" id="pacsWlLung">Lung</button>
       <button class="btn small secondary" type="button" id="pacsInvert">Invert</button>
       <a class="btn small secondary" href="<?= e(url('/pacs/report.php?study_uid=' . rawurlencode($studyUid))) ?>">Report</a>
-      <a class="btn small secondary" href="<?= e(url('/pacs/launch.php?study_uid=' . rawurlencode($studyUid))) ?>">Native App</a>
     </div>
-    <div id="pacsStatus" class="pacs-status">Viewer native web internal. Mendukung DICOM uncompressed little-endian grayscale; file compressed/JPEG tetap bisa diunduh via WADO.</div>
+    <div id="pacsStatus" class="pacs-status">Viewer web internal. Mendukung DICOM grayscale uncompressed little-endian.</div>
     <div class="pacs-canvas-wrap" id="pacsCanvasWrap">
       <canvas id="pacsCanvas" width="512" height="512"></canvas>
       <div class="pacs-overlay" id="pacsOverlay"></div>

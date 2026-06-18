@@ -25,7 +25,7 @@
     const bytes = new Uint8Array(buf);
     let off = 0;
     if (buf.byteLength >= 132 && str(bytes.slice(128,132)) === 'DICM') off = 132;
-    const meta = {}, longVr = {OB:1,OD:1,OF:1,OL:1,OW:1,SQ:1,UC:1,UR:1,UT:1,UN:1};
+    const meta = {}, longVr = {OB:1,OD:1,OF:1,OL:1,OV:1,OW:1,SQ:1,SV:1,UC:1,UR:1,UT:1,UN:1,UV:1};
     let pixelOffset = -1, pixelLength = 0, loops = 0, transferSyntax = '', datasetExplicit = true;
     const tags = {
       '0002,0010':'TransferSyntaxUID','0028,0010':'Rows','0028,0011':'Columns','0028,0100':'BitsAllocated','0028,0101':'BitsStored','0028,0103':'PixelRepresentation','0028,1050':'WindowCenter','0028,1051':'WindowWidth','0028,1052':'RescaleIntercept','0028,1053':'RescaleSlope','0028,0004':'PhotometricInterpretation','0020,0013':'InstanceNumber','0008,0060':'Modality','0008,103E':'SeriesDescription','0010,0010':'PatientName','0010,0020':'PatientID'
@@ -45,6 +45,56 @@
       }
       return {group, elem, tag:group.toString(16).padStart(4,'0').toUpperCase()+','+elem.toString(16).padStart(4,'0').toUpperCase(), vr, header, vl, valueOffset:o+header};
     }
+    function looksLikeElement(o, explicit){
+      const el = readElement(o, explicit);
+      if (!el) return false;
+      if (el.group === 0xfffe) return true;
+      if (explicit && !el.vr) return false;
+      return el.valueOffset <= buf.byteLength && (el.vl === 0xffffffff || el.valueOffset + el.vl <= buf.byteLength);
+    }
+    function skipUndefinedSequence(start){
+      // Cari Sequence Delimitation Item (FFFE,E0DD). Ini mencegah parser berhenti
+      // pada SQ undefined-length sebelum mencapai Pixel Data.
+      for (let p = start; p + 8 <= buf.byteLength; p += 2) {
+        if (u16(d, p) === 0xfffe && u16(d, p+2) === 0xe0dd) {
+          const next = p + 8;
+          if (next >= buf.byteLength || looksLikeElement(next, datasetExplicit) || looksLikeElement(next, false)) return next;
+        }
+      }
+      return -1;
+    }
+    function findPixelData(){
+      for (let p = 132; p + 12 <= buf.byteLength; p += 2) {
+        if (u16(d, p) !== 0x7fe0 || u16(d, p+2) !== 0x0010) continue;
+        const vr = str(bytes.slice(p+4, p+6));
+        if (/^[A-Z]{2}$/.test(vr)) {
+          if (longVr[vr]) {
+            const vl = u32(d, p+8);
+            return {offset:p+12, length:vl};
+          }
+          const vl = u16(d, p+6);
+          return {offset:p+8, length:vl};
+        }
+        return {offset:p+8, length:u32(d, p+4)};
+      }
+      return null;
+    }
+    function fallbackTag(tag, explicit){
+      const [g,e] = tag.split(',').map(x => parseInt(x,16));
+      for (let p = 132; p + 8 <= buf.byteLength; p += 2) {
+        if (u16(d,p) !== g || u16(d,p+2) !== e) continue;
+        const el = readElement(p, explicit);
+        if (el && el.vl !== 0xffffffff && el.vl > 0 && el.valueOffset + Math.min(el.vl, 4096) <= buf.byteLength) return el;
+      }
+      return null;
+    }
+    function storeTag(el){
+      if (!el || !tags[el.tag] || el.vl <= 0 || el.valueOffset + Math.min(el.vl, 4096) > buf.byteLength) return;
+      if (intTags[el.tag] && el.vl <= 4) meta[tags[el.tag]] = u16(d, el.valueOffset);
+      else meta[tags[el.tag]] = str(bytes.slice(el.valueOffset, el.valueOffset + Math.min(el.vl, 4096))).split('\\')[0];
+      if (el.tag === '0002,0010') transferSyntax = String(meta.TransferSyntaxUID || '').trim();
+    }
+
     while (off + 8 <= buf.byteLength && loops++ < 300000) {
       const peekGroup = u16(d, off);
       const explicit = (peekGroup === 0x0002) ? true : datasetExplicit;
@@ -55,13 +105,13 @@
       }
       if (!el) break;
       if (el.tag === '7FE0,0010') { pixelOffset = off + el.header; pixelLength = el.vl; break; }
-      if (el.vl === 0xffffffff) break;
-      if (el.vl > buf.byteLength || el.valueOffset > buf.byteLength) break;
-      if (tags[el.tag] && el.vl > 0 && el.valueOffset + Math.min(el.vl, 4096) <= buf.byteLength) {
-        if (intTags[el.tag] && el.vl <= 4) meta[tags[el.tag]] = u16(d, el.valueOffset);
-        else meta[tags[el.tag]] = str(bytes.slice(el.valueOffset, el.valueOffset + Math.min(el.vl, 4096))).split('\\')[0];
-        if (el.tag === '0002,0010') transferSyntax = String(meta.TransferSyntaxUID || '').trim();
+      storeTag(el);
+      if (el.vl === 0xffffffff) {
+        const next = skipUndefinedSequence(el.valueOffset);
+        if (next > off) { off = next; continue; }
+        break;
       }
+      if (el.vl > buf.byteLength || el.valueOffset > buf.byteLength) break;
       const step = el.header + el.vl + (el.vl % 2);
       if (step <= 0) break;
       off += step;
@@ -69,9 +119,22 @@
         datasetExplicit = transferSyntax !== '1.2.840.10008.1.2';
       }
     }
-    if (pixelOffset < 0) throw new Error('Pixel Data tidak ditemukan. Metadata mungkin terbaca, tetapi pixel data tidak ditemukan pada file ini.');
+
+    if (pixelOffset < 0) {
+      const px = findPixelData();
+      if (px) { pixelOffset = px.offset; pixelLength = px.length; }
+    }
+    Object.keys(tags).forEach(tag => {
+      const key = tags[tag];
+      if (meta[key] !== undefined) return;
+      let el = fallbackTag(tag, tag.startsWith('0002,') ? true : datasetExplicit);
+      if (!el && !tag.startsWith('0002,')) el = fallbackTag(tag, false);
+      storeTag(el);
+    });
+
+    if (pixelOffset < 0) throw new Error('Pixel Data tidak ditemukan pada file DICOM ini.');
     const rows = Number(meta.Rows||0), cols = Number(meta.Columns||0), bits = Number(meta.BitsAllocated||16);
-    if (!rows || !cols) throw new Error('Rows/Columns tidak terbaca. Kemungkinan transfer syntax/metadata belum didukung.');
+    if (!rows || !cols) throw new Error('Rows/Columns tidak terbaca. Metadata DICOM belum lengkap atau belum didukung.');
     if (![8,16].includes(bits)) throw new Error('BitsAllocated ' + bits + ' belum didukung');
     if (pixelLength === 0xffffffff) {
       const ts = meta.TransferSyntaxUID ? (' TransferSyntaxUID: ' + meta.TransferSyntaxUID + '.') : '';
@@ -136,7 +199,7 @@
       renderDicom(parsed, buf);
     } catch(e) {
       ctx.clearRect(0,0,canvas.width,canvas.height);
-      overlay.textContent = 'Tidak dapat menampilkan pixel data.\n' + e.message + '\nGunakan tombol Native App/WADO untuk DICOM compressed, atau upload ulang bila file fisik hilang.';
+      overlay.textContent = 'Tidak dapat menampilkan pixel data.\n' + e.message + '\nViewer web internal hanya mendukung DICOM grayscale uncompressed. Upload ulang bila file fisik hilang/terpotong.';
       setStatus('Viewer internal belum bisa membaca slice ini: ' + e.message, true);
     }
   }
