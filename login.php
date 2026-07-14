@@ -17,7 +17,8 @@ $error = null;
 if (is_post()) {
   $u = trim($_POST['username'] ?? '');
   $p = (string)($_POST['password'] ?? '');
-  if (auth_login($u, $p)) {
+  $remember = !empty($_POST['remember_me']);
+  if (auth_login($u, $p, $remember)) {
     flash_set('ok', 'Login berhasil.');
     redirect('/index.php');
   } else {
@@ -54,6 +55,10 @@ if (is_post()) {
         <input class="input" name="username" required>
         <div class="label" style="margin-top:10px">Password</div>
         <input class="input" type="password" name="password" required>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;user-select:none">
+          <input type="checkbox" name="remember_me" value="1" style="width:18px;height:18px">
+          <span>Ingat saya</span>
+        </label>
         <div style="display:flex;justify-content:flex-end;margin-top:12px">
           <button class="btn" type="submit">Masuk</button>
         </div>
