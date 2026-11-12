@@ -115,10 +115,16 @@ body {
   margin-top: 2px;
   font-size: 10px;
 }
+@media print {
+  .paper { height: auto; }
+  .header, .info, .sign { break-inside: avoid; page-break-inside: avoid; }
+  .content { break-inside: auto; white-space: pre-wrap; overflow-wrap: anywhere; orphans: 3; widows: 3; }
+  .sign img { display: inline-block; }
+}
 </style>
 </head>
 
-<body onload="window.print()">
+<body >
   <div class="paper">
 
     <div class="header">
@@ -150,5 +156,6 @@ body {
     </div>
 
   </div>
+  <script src="<?= e(url('/public/assets/js/print_layout.js')) ?>"></script>
 </body>
 </html>

@@ -117,25 +117,33 @@ function auth_restore_from_remember_cookie(): ?array {
     $stmt->execute([$selector]);
     $row = $stmt->fetch();
 
-    if (!$row || strtotime((string)$row['expires_at']) <= time() || !hash_equals((string)$row['validator_hash'], hash('sha256', $validator))) {
-      if ($row) db_exec("DELETE FROM auth_remember_tokens WHERE id = ?", [(int)$row['token_id']]);
+    if (!$row || strtotime((string)$row['expires_at']) <= time() ||
+        !hash_equals((string)$row['validator_hash'], hash('sha256', $validator))) {
+      // Token salah tidak boleh menghapus token sah pada perangkat lain.
       auth_clear_remember_cookie();
       return null;
     }
 
-    // One-time rotation: token lama langsung dicabut, lalu dibuat token baru.
-    db_exec("DELETE FROM auth_remember_tokens WHERE id = ?", [(int)$row['token_id']]);
+    // Token tetap stabil: permintaan paralel/tab lain tidak saling mencabut token.
+    // Validator hanya disimpan dalam bentuk hash di database.
     auth_store_session_user($row);
-    auth_remember_create((int)$row['user_id']);
-    db_exec(
-      "INSERT INTO audit_logs(created_at, user_id, action, meta) VALUES(?,?,?,?)",
-      [now_dt(), (int)$row['user_id'], 'login_remembered', json_encode(['ip'=>$_SERVER['REMOTE_ADDR'] ?? ''], JSON_UNESCAPED_UNICODE)]
-    );
+    try {
+      db_exec("UPDATE auth_remember_tokens SET last_used_at = ? WHERE id = ?", [now_dt(), (int)$row['token_id']]);
+    } catch (Throwable $e) {
+      log_app('error', 'Remember token last-used update failed', ['error'=>$e->getMessage()]);
+    }
+    try {
+      db_exec(
+        "INSERT INTO audit_logs(created_at, user_id, action, meta) VALUES(?,?,?,?)",
+        [now_dt(), (int)$row['user_id'], 'login_remembered', json_encode(['ip'=>$_SERVER['REMOTE_ADDR'] ?? ''], JSON_UNESCAPED_UNICODE)]
+      );
+    } catch (Throwable $e) {
+      log_app('error', 'Remember audit failed', ['error'=>$e->getMessage()]);
+    }
     return $_SESSION['user'];
   } catch (Throwable $e) {
-    // Bila migrasi belum dijalankan, jangan membuat seluruh aplikasi gagal.
+    // Gangguan database sementara tidak boleh menghapus cookie login permanen.
     log_app('error', 'Remember token restore failed', ['error'=>$e->getMessage()]);
-    auth_clear_remember_cookie();
     return null;
   }
 }

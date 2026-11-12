@@ -60,8 +60,9 @@ try {
     .signbox{text-align:center}
     .signbox img{width:180px;height:auto}
   </style>
+  <link rel="stylesheet" href="<?= e(url('/public/assets/css/print_layout.css')) ?>">
 </head>
-<body onload="window.print()">
+<body >
   <div class="paper">
     <div class="kop">
       <?php if ($logo): ?><img src="<?= e(url($logo)) ?>" alt="Logo"><?php endif; ?>
@@ -104,5 +105,6 @@ try {
       </div>
     </div>
   </div>
+  <script src="<?= e(url('/public/assets/js/print_layout.js')) ?>"></script>
 </body>
 </html>

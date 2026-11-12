@@ -11,6 +11,8 @@ if (!$installed) {
 }
 
 session_boot();
+// Sesi atau cookie Ingat Saya yang valid langsung menuju dashboard.
+if (!is_post() && auth_user()) redirect('/index.php');
 csrf_validate();
 
 $error = null;
@@ -64,7 +66,6 @@ if (is_post()) {
         </div>
       </form>
 
-      <div class="muted" style="margin-top:10px">Jika ada error, jangan panik: log dulu, baru panik terukur.</div>
     </div>
   </div>
 </body>
