@@ -10,5 +10,6 @@ $footer_text = $settings['footer_text'] ?? '© 2026 Adena Medical System ver 1.1
 </div>
 
 <script src="<?= e(url('/public/assets/js/app.js')) ?>"></script>
+<script src="<?= e(url('/public/assets/js/date_inputs.js')) ?>"></script>
 </body>
 </html>

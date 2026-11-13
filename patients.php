@@ -50,7 +50,7 @@ if ($action === 'register_today' || $action === 'register_date') {
     $date = date('Y-m-d');
   } else {
     $date = trim($_POST['queue_date'] ?? '');
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !checkdate((int)substr($date,5,2), (int)substr($date,8,2), (int)substr($date,0,4))) {
       flash_set('err','Tanggal daftar tidak valid.');
       redirect('/patients.php');
     }
@@ -160,7 +160,7 @@ require __DIR__ . '/app/views/partials/header.php';
 
     <div class="col-6">
       <div class="label">Tanggal Lahir (dd/mm/yyyy)</div>
-      <input class="input" type="text" name="dob" placeholder="dd/mm/yyyy">
+      <input class="input" type="text" name="dob" data-ams-date-display="1" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" autocomplete="off">
     </div>
 
     <div class="col-6">
@@ -215,13 +215,13 @@ require __DIR__ . '/app/views/partials/header.php';
                 <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="action" value="register_date">
                 <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                <input class="input" type="date" name="queue_date" style="max-width:160px">
+                <input class="input" type="text" data-ams-date="1" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" autocomplete="off" name="queue_date" style="max-width:160px">
                 <button class="btn small secondary" type="submit">Daftar</button>
               </form>
             <?php endif; ?>
 
             <?php if (!$is_sekretariat): ?>
-              <a class="btn small secondary" href="<?= e(url('/visits.php?patient_id='.(int)$r['id'])) ?>">Kunjungan</a>
+              <button class="btn small secondary" type="button" data-history-patient="<?= (int)$r['id'] ?>">Riwayat Kunjungan</button>
             <?php endif; ?>
 
             <?php if ($is_admin): ?>
@@ -241,4 +241,33 @@ require __DIR__ . '/app/views/partials/header.php';
   </table>
 </div>
 
+<div class="ams-modal-backdrop" id="patientHistoryModal" hidden>
+  <section class="ams-modal" role="dialog" aria-modal="true" aria-labelledby="patientHistoryTitle" tabindex="-1">
+    <div class="ams-modal-head"><h2 id="patientHistoryTitle">Riwayat Kunjungan</h2><button class="icon-btn" type="button" id="closePatientHistory" aria-label="Tutup riwayat">×</button></div>
+    <div class="ams-modal-content" id="patientHistoryContent" aria-live="polite"></div>
+  </section>
+</div>
+<script>
+(function(){
+  const modal = document.getElementById('patientHistoryModal');
+  const content = document.getElementById('patientHistoryContent');
+  const close = document.getElementById('closePatientHistory');
+  let lastFocus = null, activeRequest = null;
+  function hide(){ modal.hidden=true; if(activeRequest) activeRequest.abort(); if(lastFocus) lastFocus.focus(); }
+  close.addEventListener('click',hide);
+  modal.addEventListener('click',e=>{ if(e.target===modal) hide(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!modal.hidden){e.stopImmediatePropagation();hide();} });
+  document.querySelectorAll('[data-history-patient]').forEach(button=>button.addEventListener('click',async ()=>{
+    lastFocus=button; modal.hidden=false; modal.querySelector('.ams-modal').focus();
+    content.textContent='Memuat riwayat kunjungan…';
+    if(activeRequest) activeRequest.abort();
+    activeRequest = new AbortController();
+    try{
+      const response=await fetch(<?= json_encode(url('/patient_history.php')) ?>+'?id='+encodeURIComponent(button.dataset.historyPatient),{credentials:'same-origin',signal:activeRequest.signal,headers:{'X-Requested-With':'XMLHttpRequest'}});
+      if(!response.ok) throw new Error('HTTP '+response.status);
+      content.innerHTML=await response.text();
+    }catch(err){if(err.name!=='AbortError') content.textContent='Riwayat tidak dapat dimuat. Coba lagi.';}
+  }));
+})();
+</script>
 <?php require __DIR__ . '/app/views/partials/footer.php'; ?>

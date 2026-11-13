@@ -25,7 +25,11 @@ if (is_post()) {
   if ($is_sekretariat) {
     db_exec("UPDATE patients SET full_name=? WHERE id=?", [$name, $id]);
   } else {
-    $dob = $_POST['dob'] ?? null;
+    $dob = trim((string)($_POST['dob'] ?? ''));
+    if ($dob !== '' && (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $dob, $dm) || !checkdate((int)$dm[2], (int)$dm[3], (int)$dm[1]))) {
+      flash_set('err','Tanggal lahir tidak valid.');
+      redirect('/patient_edit.php?id='.$id);
+    }
     $gender = $_POST['gender'] ?? 'L';
     $address = trim($_POST['address'] ?? '');
     db_exec("UPDATE patients SET full_name=?, dob=?, gender=?, address=? WHERE id=?",
@@ -57,7 +61,7 @@ require __DIR__ . '/app/views/partials/header.php';
     <?php if (!$is_sekretariat): ?>
       <div class="col-6">
         <div class="label">Tanggal Lahir</div>
-        <input class="input" type="date" name="dob" value="<?= e($p['dob'] ?? '') ?>">
+        <input class="input" type="text" data-ams-date="1" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" autocomplete="off" name="dob" value="<?= e($p['dob'] ?? '') ?>">
       </div>
       <div class="col-6">
         <div class="label">Jenis Kelamin</div>

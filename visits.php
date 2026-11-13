@@ -227,11 +227,11 @@ if ($patientId <= 0) {
       </div>
       <div>
         <div class="label">Mulai</div>
-        <input class="input" type="date" name="start" value="<?= e($d1) ?>">
+        <input class="input" type="text" data-ams-date="1" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" autocomplete="off" name="start" value="<?= e($d1) ?>">
       </div>
       <div>
         <div class="label">Sampai</div>
-        <input class="input" type="date" name="end" value="<?= e($d2) ?>">
+        <input class="input" type="text" data-ams-date="1" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" autocomplete="off" name="end" value="<?= e($d2) ?>">
       </div>
       <button class="btn secondary" type="submit">Terapkan</button>
       <a class="btn" href="<?= e(url('/patients.php')) ?>">+ Pasien</a>

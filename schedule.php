@@ -69,11 +69,11 @@ require __DIR__ . '/app/views/partials/header.php';
       <input type="hidden" name="mode" value="custom">
       <div>
         <div class="label">Mulai</div>
-        <input class="input" type="date" name="start" value="<?= e($start) ?>" required>
+        <input class="input" type="text" data-ams-date="1" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" autocomplete="off" name="start" value="<?= e($start) ?>" required>
       </div>
       <div>
         <div class="label">Sampai</div>
-        <input class="input" type="date" name="end" value="<?= e($end) ?>" required>
+        <input class="input" type="text" data-ams-date="1" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" autocomplete="off" name="end" value="<?= e($end) ?>" required>
       </div>
       <button class="btn" type="submit">Terapkan</button>
     </form>
