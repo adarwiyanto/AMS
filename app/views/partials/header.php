@@ -13,6 +13,7 @@ $u = $u ?? null;
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= e($title ?? $brand_title) ?></title>
+  <link rel="icon" href="<?= e($logo_url ? url($logo_url) : url('/public/assets/img/ams-favicon.svg')) ?>">
   <link rel="stylesheet" href="<?= e(url('/public/assets/css/theme.css')) ?>">
   <style><?= $custom_css ?></style>
 </head>

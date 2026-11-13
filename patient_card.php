@@ -38,6 +38,7 @@ $auto = (int)($_GET['auto'] ?? 0);
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kartu Berobat - <?= e($p['mrn']) ?></title>
+  <link rel="icon" href="<?= e($logo ? url($logo) : url('/public/assets/img/ams-favicon.svg')) ?>">
   <link rel="stylesheet" href="<?= e(url('/public/assets/css/theme.css')) ?>">
   <style>
     @page { size: 85.6mm 53.98mm; margin: 0; }

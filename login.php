@@ -3,6 +3,7 @@ require_once __DIR__ . '/app/bootstrap.php';
 require_once __DIR__ . '/app/helpers.php';
 require_once __DIR__ . '/app/auth.php';
 require_once __DIR__ . '/app/db.php';
+require_once __DIR__ . '/app/controllers/common.php';
 
 $installed = file_exists(__DIR__ . '/install/locked.txt') && file_exists(__DIR__ . '/app/config.php');
 if (!$installed) {
@@ -28,6 +29,13 @@ if (is_post()) {
     log_app('info', 'Login failed', ['username'=>$u,'ip'=>$_SERVER['REMOTE_ADDR'] ?? '']);
   }
 }
+$login_logo = '';
+try {
+  $login_settings = get_settings();
+  $login_logo = $login_settings['logo_path'] ?? '';
+} catch (Throwable $e) {
+  // Pertahankan login meskipun pengaturan belum tersedia.
+}
 ?>
 <!doctype html>
 <html lang="id">
@@ -35,6 +43,7 @@ if (is_post()) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login - AMS</title>
+  <link rel="icon" href="<?= e($login_logo ? url($login_logo) : url('/public/assets/img/ams-favicon.svg')) ?>">
   <link rel="stylesheet" href="<?= e(url('/public/assets/css/theme.css')) ?>">
 </head>
 <body>
