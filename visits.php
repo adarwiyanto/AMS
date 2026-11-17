@@ -148,6 +148,7 @@ if ($action === 'create_visit') {
   }
 
   flash_set('ok','Kunjungan tersimpan. No: ' . $visitNo);
+  if (($_POST['save_mode'] ?? '') === 'pdf') redirect('/visit_pdf.php?id=' . $newVisitId);
   redirect('/visits.php?patient_id=' . $patientId);
 }
 
@@ -167,6 +168,7 @@ if ($action === 'update_visit') {
   );
 
   flash_set('ok','Kunjungan diperbarui.');
+  if (($_POST['save_mode'] ?? '') === 'pdf') redirect('/visit_pdf.php?id=' . $id);
   $pid = (int)($_POST['patient_id'] ?? 0);
   redirect('/visits.php?patient_id=' . $pid);
 }
@@ -399,7 +401,8 @@ require __DIR__ . '/app/views/partials/header.php';
       </div>
 
       <div class="col-12" style="display:flex;justify-content:flex-end;gap:10px">
-        <button class="btn" type="submit">Simpan Kunjungan</button>
+        <button class="btn" type="submit" name="save_mode" value="save">Simpan Kunjungan</button>
+        <button class="btn secondary" type="submit" name="save_mode" value="pdf">Simpan &amp; PDF</button>
       </div>
     </form>
   </div>

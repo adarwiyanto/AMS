@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   role ENUM('admin','dokter','perawat') NOT NULL DEFAULT 'dokter',
   full_name VARCHAR(120) DEFAULT NULL,
+  avatar_path VARCHAR(255) DEFAULT NULL,
   sip VARCHAR(80) DEFAULT NULL,
   phone VARCHAR(50) DEFAULT NULL,
   email VARCHAR(120) DEFAULT NULL,

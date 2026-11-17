@@ -6,6 +6,13 @@ $badge = $settings['brand_badge'] ?? 'Adena Medical System';
 $logo_url = $settings['logo_path'] ?? '';
 $custom_css = $settings['custom_css'] ?? '';
 $u = $u ?? null;
+$avatar_path = '';
+if ($u) {
+  try {
+    $av = db()->prepare('SELECT avatar_path FROM users WHERE id=? LIMIT 1');
+    $av->execute([(int)$u['id']]); $avatar_path = (string)($av->fetchColumn() ?: '');
+  } catch (Throwable $e) { /* kolom avatar belum dimigrasikan */ }
+}
 $is_dashboard = basename($_SERVER['SCRIPT_NAME'] ?? '') === 'index.php' && !str_contains($_SERVER['SCRIPT_NAME'] ?? '', '/pacs/');
 ?>
 <!doctype html>
@@ -15,7 +22,7 @@ $is_dashboard = basename($_SERVER['SCRIPT_NAME'] ?? '') === 'index.php' && !str_
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= e($title ?? $brand_title) ?></title>
   <link rel="icon" href="<?= e($logo_url ? url($logo_url) : url('/public/assets/img/ams-favicon.svg')) ?>">
-  <link rel="stylesheet" href="<?= e(url('/public/assets/css/theme.css?v=20261113-preview-v2')) ?>">
+  <link rel="stylesheet" href="<?= e(url('/public/assets/css/theme.css?v=20261117-profile-history-pdf')) ?>">
   <style><?= $custom_css ?></style>
 </head>
 <body>
@@ -58,7 +65,6 @@ $is_dashboard = basename($_SERVER['SCRIPT_NAME'] ?? '') === 'index.php' && !str_
           <span>Akun</span><span class="nav-caret">▸</span>
         </button>
         <div class="nav-sub" hidden>
-          <a href="<?= e(url('/profile.php')) ?>">Profile</a>
           <?php if ($u && $u['role'] === 'admin'): ?>
             <a href="<?= e(url('/pacs/settings.php')) ?>">Setting PACS</a>
           <?php endif; ?>
@@ -76,7 +82,7 @@ $is_dashboard = basename($_SERVER['SCRIPT_NAME'] ?? '') === 'index.php' && !str_
     <header class="topbar no-print">
       <button class="icon-btn menu-toggle" type="button" onclick="toggleSidebar()" aria-label="Buka menu" aria-controls="sidebar" aria-expanded="false">☰</button>
       <div class="topbar-title"><?= $is_dashboard ? 'Dashboard' : e($brand_title) ?></div>
-      <div class="topbar-user"><span class="ams-user-avatar" aria-hidden="true">●</span><?= $u ? e($u['full_name']) : '' ?><span class="ams-user-caret" aria-hidden="true">⌄</span></div>
+      <details class="ams-account-menu"><summary class="topbar-user"><span class="ams-user-avatar" aria-hidden="true"><?php if ($avatar_path): ?><img src="<?= e(url($avatar_path)) ?>" alt=""><?php else: ?>●<?php endif; ?></span><?= $u ? e($u['full_name']) : '' ?><span class="ams-user-caret" aria-hidden="true">⌄</span></summary><div class="ams-account-dropdown"><a href="<?= e(url('/profile.php')) ?>">Edit Profil</a><a href="<?= e(url('/logout.php')) ?>">Logout</a></div></details>
     </header>
 
     <div class="container">

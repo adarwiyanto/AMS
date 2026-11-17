@@ -266,6 +266,19 @@ require __DIR__ . '/app/views/partials/header.php';
       const response=await fetch(<?= json_encode(url('/patient_history.php')) ?>+'?id='+encodeURIComponent(button.dataset.historyPatient),{credentials:'same-origin',signal:activeRequest.signal,headers:{'X-Requested-With':'XMLHttpRequest'}});
       if(!response.ok) throw new Error('HTTP '+response.status);
       content.innerHTML=await response.text();
+      const choices=[...content.querySelectorAll('[data-history-visit]')];
+      const frame=content.querySelector('#amsHistoryFrame');
+      function selectVisit(choice){
+        choices.forEach(c=>{c.classList.toggle('selected',c===choice);c.setAttribute('aria-selected',c===choice?'true':'false');});
+        const id=encodeURIComponent(choice.dataset.historyVisit);
+        frame.src=<?= json_encode(url('/visit_preview.php')) ?>+'?id='+id;
+        content.querySelector('#amsHistoryEdit').href=<?= json_encode(url('/visit_edit.php')) ?>+'?id='+id;
+        content.querySelector('#amsHistoryPrint').href=<?= json_encode(url('/print_visit.php')) ?>+'?id='+id;
+        content.querySelector('#amsHistoryPdf').href=<?= json_encode(url('/visit_pdf.php')) ?>+'?id='+id;
+        content.querySelector('#amsHistoryStatus').textContent=choice.querySelector('strong').textContent;
+      }
+      choices.forEach(c=>c.addEventListener('click',()=>selectVisit(c)));
+      if(choices.length) selectVisit(choices[0]);
     }catch(err){if(err.name!=='AbortError') content.textContent='Riwayat tidak dapat dimuat. Coba lagi.';}
   }));
 })();

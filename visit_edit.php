@@ -131,6 +131,7 @@ if (is_post()) {
   }
 
   flash_set('ok','Kunjungan diperbarui.');
+  if (($_POST['save_mode'] ?? '') === 'pdf') redirect('/visit_pdf.php?id=' . $id);
   redirect('/visits.php?patient_id='.(int)$v['patient_id']);
 }
 
@@ -225,7 +226,8 @@ require __DIR__ . '/app/views/partials/header.php';
 
     <div class="col-12" style="display:flex;justify-content:flex-end;gap:10px">
       <a class="btn secondary" href="<?= e(url('/visits.php?patient_id='.(int)$v['patient_id'])) ?>">Kembali</a>
-      <button class="btn" type="submit">Simpan</button>
+      <button class="btn" type="submit" name="save_mode" value="save">Simpan</button>
+      <button class="btn secondary" type="submit" name="save_mode" value="pdf">Simpan &amp; PDF</button>
     </div>
   </form>
 </div>
